@@ -9,10 +9,30 @@
 ## 项目上下文
 
 **游戏**: 明暗斗地主 — 5人在线卡牌，双副牌，暗号队友隐藏身份
-**技术栈**: Cocos Creator 3.8 + TypeScript + Colyseus 0.15 + MySQL 8 + Redis 7
 **参考文档**:
 - `项目文档/明暗斗地主_游戏设计策划案_v1.0.docx` — 玩法/数值/UI
-- `项目文档/明暗斗地主_技术开发文档_v1.0.docx` — 架构/协议/DDL
+- `项目文档/明暗斗地主_技术开发文档_v1.0.docx` — 架构/协议/DDL（技术选型权威来源）
+- `docs/GAME-RULES.md` — 规则完整定义 v1.0
+
+---
+
+## 技术栈约束（我的审批依据）
+
+> 权威来源：TDD v1.0 第一章。Dev 引入任何新依赖前必须经我审批。
+
+| 端 | 已锁定技术 | 禁止替换为 |
+|----|-----------|----------|
+| **服务端** | Colyseus 0.15 / mysql2 / ioredis / jsonwebtoken | Socket.io / TypeORM / Prisma / node-redis |
+| **客户端** | Cocos Creator 3.8 原生 UI / oops-framework / colyseus.js | Laya / Egret / FairyGUI / Socket.io-client |
+| **共享层** | 纯 TypeScript，零运行时依赖 | 任何 Node.js 专有模块 |
+
+**审批流程**：Dev 在 `.tasks/blocked.md` 提出新依赖需求 → 我评估是否符合 TDD 选型原则 → 明确批准或拒绝，给出理由
+
+**我的审批标准**：
+1. TDD 第一章是否有对应选型？有 → 直接批准
+2. 是否替换了已有技术？是 → 直接拒绝
+3. 是否是纯工具类（类型定义、测试辅助）？是 → 可批准
+4. 是否引入新的数据格式或通信协议？是 → 默认拒绝，需充分理由
 
 ---
 

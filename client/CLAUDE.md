@@ -14,13 +14,13 @@
 |----|------|---------|------|
 | 游戏引擎 | Cocos Creator | Dashboard 安装 | 3.8 LTS |
 | 语言 | TypeScript | Cocos 内置 | 5.x |
-| UI 框架 | FairyGUI | Cocos 插件市场 | latest |
+| UI | Cocos Creator 原生 UI | 引擎内置（Label/Sprite/Layout/Widget） | 3.8 内置 |
 | 框架 | oops-framework | GitHub 导入 | latest |
-| 网络 | Colyseus.js Client | `npm install colyseus.js` | 0.15+ |
+| 网络 | Cocos.js Client | `npm install colyseus.js` | 0.15+ |
 
 **禁止引入的替代方案**（不论理由）：
 - ✗ LayaAir / Egret / Unity WebGL（替代 Cocos Creator）
-- ✗ UGUI / FGUI 其他版本（替代 FairyGUI）
+- ✗ FairyGUI / UGUI（外部 UI 框架，统一用 CC 原生 UI）
 - ✗ Socket.io-client（替代 colyseus.js）
 - ✗ Vue / React / 任何 Web 框架（Cocos 有自己的 UI 体系）
 
@@ -132,6 +132,48 @@ requestHint(): void
 4. **可验证目标** — 先有失败测试再写实现
 
 ---
+
+## 注释规范
+
+### 必须写的注释
+
+**1. 文件头（每个 .ts 文件）**
+```typescript
+/**
+ * @file 文件名.ts
+ * @description 这个组件/控制器做什么
+ * @module client/net | client/game | client/ui
+ */
+```
+
+**2. public 方法 JSDoc**
+```typescript
+/**
+ * 发送出牌请求到服务端。
+ * 注意：此方法只发送意图，不验证合法性（合法性由服务端判定）。
+ * @param cards 要出的牌，0-107 编码整数数组
+ */
+playCards(cards: number[]): void
+```
+
+**3. 状态机转换注释**
+```typescript
+// 收到 turn_change 消息时切换到 PLAYING 状态
+// 服务端是唯一的状态来源，客户端不自行推断状态
+case 'playing':
+  this.state = ClientGameState.PLAYING;
+```
+
+**4. 性能相关注释**
+```typescript
+// 使用对象池避免频繁 instantiate，减少 GC 压力
+// 微信小程序对内存敏感，卡牌节点必须复用
+this.cardPool.get();
+```
+
+### 不需要写的注释
+- 框架 API 的标准用法（oops / FairyGUI 文档已有说明）
+- 显而易见的赋值和条件判断
 
 ## 测试规范
 
