@@ -1,3 +1,12 @@
+/**
+ * @file PatternHelper.ts
+ * @description shared 层牌型辅助工具：parse() 识别牌型，canBeat() 判断压牌。
+ *              供客户端出牌前本地预检和服务端 CardPatternEngine 复用。
+ *              永不抛出异常，非法输入返回 INVALID 或 false。
+ * @module shared/PatternHelper
+ * @see GAME-RULES §5 出牌规则，§6 牌型系统
+ */
+
 import { CardPattern, PatternType } from './CardPattern';
 import { compareValue, isJoker, isLargeJoker, isSmallJoker } from './CardEncoding';
 
@@ -31,7 +40,8 @@ export function parse(cards: number[]): CardPattern {
     return invalid(cards); // 1 small + 1 large
   }
 
-  // any remaining joker combination (mixed, 1, 3+, joker+regular) → INVALID
+  // GAME-RULES §6.3: 王炸必须恰好 2 张且同类型；1张王、3张及以上王、
+  // 王与普通牌混搭均不构成任何合法牌型
   if (jokers.length > 0) return invalid(cards);
 
   // ── group regular cards by compareValue (sorted ascending) ───────────────
@@ -86,6 +96,8 @@ export function parse(cards: number[]): CardPattern {
   }
 
   // ── straight (≥5, all unique, consecutive, rank 3-K) ─────────────────────
+  // GAME-RULES §6.1: 顺子每个点数恰好1张（counts.every(c===1) 保证无重复）；
+  // compareValue≤13 限定范围为 3–K，排除 A(14)、2(15) 和王(16/17)
   if (n >= 5 && counts.every(c => c === 1)) {
     if (values.every(v => v <= 13) && isConsecutive(values)) {
       return { type: PatternType.STRAIGHT, cards, primaryValue: values[values.length - 1], length: n };
@@ -133,11 +145,17 @@ export function parse(cards: number[]): CardPattern {
 
 /**
  * 判断 challenger 是否能严格压过 current。
+ *
+ * 压牌优先级（GAME-RULES §6.2, §6.3）：
+ *   双大王炸 > 双小王炸 > 八张炸 > 七张炸 > 六张炸 > 五张炸 > 四张炸 > 普通牌型
+ *
+ *   普通牌型之间：类型相同 + length 相同 + primaryValue 更高 → 可压
+ *   炸弹之间：先比 length（多者胜），length 相同再比 primaryValue
  */
 export function canBeat(challenger: CardPattern, current: CardPattern): boolean {
   if (challenger.type === PatternType.INVALID || current.type === PatternType.INVALID) return false;
 
-  // 双大王炸无敌
+  // GAME-RULES §6.3: 双大王炸（天炸）无敌，任何牌型（包括自身）均无法压过
   if (current.type === PatternType.JOKER_BOMB_BIG) return false;
   if (challenger.type === PatternType.JOKER_BOMB_BIG) return true;
 
@@ -146,7 +164,7 @@ export function canBeat(challenger: CardPattern, current: CardPattern): boolean 
     return current.type !== PatternType.JOKER_BOMB_SMALL;
   }
 
-  // 普通炸弹 vs 普通炸弹：先比张数，再比点数
+  // GAME-RULES §6.2: 普通炸弹对决——先比张数（多者胜），张数相同再比 primaryValue
   if (challenger.type === PatternType.BOMB && current.type === PatternType.BOMB) {
     if (challenger.length !== current.length) return challenger.length > current.length;
     return challenger.primaryValue > current.primaryValue;
