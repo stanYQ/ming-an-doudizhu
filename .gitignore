@@ -17,3 +17,6 @@ client/library/
 .vscode/
 .idea/
 infra/certs/
+server/coverage/
+.claude/settings.local.json
+server/.claude/
