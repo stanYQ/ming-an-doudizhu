@@ -8,13 +8,28 @@
 
 ## 我的技术栈
 
-| 层 | 技术 | 版本 |
-|----|------|------|
-| 游戏引擎 | Cocos Creator | 3.8 LTS |
-| 语言 | TypeScript | 5.x |
-| UI 框架 | FairyGUI | latest |
-| 框架 | oops-framework | latest |
-| 网络 | Colyseus.js Client | 0.15+ |
+> 权威来源：`项目文档/明暗斗地主_技术开发文档_v1.0.docx` 第一章。以下为唯一允许使用的技术，**不得自行引入任何未列出的依赖**。
+
+| 层 | 技术 | 获取方式 | 版本 |
+|----|------|---------|------|
+| 游戏引擎 | Cocos Creator | Dashboard 安装 | 3.8 LTS |
+| 语言 | TypeScript | Cocos 内置 | 5.x |
+| UI 框架 | FairyGUI | Cocos 插件市场 | latest |
+| 框架 | oops-framework | GitHub 导入 | latest |
+| 网络 | Colyseus.js Client | `npm install colyseus.js` | 0.15+ |
+
+**禁止引入的替代方案**（不论理由）：
+- ✗ LayaAir / Egret / Unity WebGL（替代 Cocos Creator）
+- ✗ UGUI / FGUI 其他版本（替代 FairyGUI）
+- ✗ Socket.io-client（替代 colyseus.js）
+- ✗ Vue / React / 任何 Web 框架（Cocos 有自己的 UI 体系）
+
+**引入新依赖的流程**：在 `.tasks/blocked.md` 报告 → PM 确认 → 才能安装
+
+**多平台构建目标**（Cocos Creator 构建面板配置）：
+- 微信小程序（主要目标，主包 ≤ 2MB）
+- H5
+- Android / iOS（P4 阶段）
 
 ---
 

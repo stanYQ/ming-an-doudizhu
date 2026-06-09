@@ -8,14 +8,25 @@
 
 ## 我的技术栈
 
-| 层 | 技术 | 版本 |
-|----|------|------|
-| 运行时 | Node.js | 20 LTS |
-| 语言 | TypeScript | 5.x |
-| 游戏框架 | Colyseus | 0.15+ |
-| 数据库 | MySQL | 8.0 |
-| 缓存 | Redis | 7 |
-| 测试 | Jest | latest |
+> 权威来源：`项目文档/明暗斗地主_技术开发文档_v1.0.docx` 第一章。以下为唯一允许使用的技术和包，**不得自行引入任何未列出的依赖**。
+
+| 层 | 技术 | npm 包名 | 版本 |
+|----|------|---------|------|
+| 运行时 | Node.js | — | 20 LTS |
+| 语言 | TypeScript | `typescript` | ^5.0 |
+| 游戏框架 | Colyseus | `colyseus` + `@colyseus/schema` | ^0.15 |
+| 数据库客户端 | MySQL2 | `mysql2` | ^3.0 |
+| 缓存客户端 | ioredis | `ioredis` | ^5.0 |
+| 鉴权 | jsonwebtoken | `jsonwebtoken` + `@types/jsonwebtoken` | ^9.0 |
+| 测试 | Jest + ts-jest | `jest` + `ts-jest` | ^29.0 |
+
+**禁止引入的替代方案**（不论理由）：
+- ✗ Socket.io / ws / uWebSockets（替代 Colyseus WebSocket）
+- ✗ TypeORM / Prisma / Sequelize（替代原生 mysql2）
+- ✗ Mongoose / PostgreSQL（替代 MySQL）
+- ✗ node-redis（替代 ioredis）
+
+**引入新依赖的流程**：在 `.tasks/blocked.md` 报告 → PM 确认 → 才能 `npm install`
 
 ---
 
