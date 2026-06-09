@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/cris/Desktop/game_project/specs/**)",
+      "Read(//Users/cris/Desktop/game_project/shared/**)",
+      "Bash(npm install *)",
+      "Bash(npx jest *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(list\\(d.keys\\(\\)\\)\\)\")"
+    ]
+  }
+}

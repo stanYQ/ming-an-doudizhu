@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>明暗斗地主 — 可视化图表</title>
+<style>
+  :root {
+    --bg: #f8f7f4;
+    --card: #ffffff;
+    --border: #e4e2da;
+    --text: #1a1a18;
+    --muted: #6b6a64;
+    --blue: #185FA5;
+    --blue-light: #E6F1FB;
+    --teal: #0F6E56;
+    --teal-light: #E1F5EE;
+    --amber: #854F0B;
+    --amber-light: #FAEEDA;
+    --coral: #993C1D;
+    --coral-light: #FAECE7;
+    --gray-light: #F1EFE8;
+    --purple: #534AB7;
+    --purple-light: #EEEDFE;
+    --green: #3B6D11;
+    --green-light: #EAF3DE;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; }
+  .page { max-width: 960px; margin: 0 auto; padding: 32px 20px 60px; }
+  h1 { font-size: 24px; font-weight: 600; color: var(--blue); margin-bottom: 4px; }
+  .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 32px; }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 28px; }
+  .tab { padding: 8px 16px; font-size: 13px; cursor: pointer; border-radius: 6px 6px 0 0; color: var(--muted); border: 1px solid transparent; border-bottom: none; transition: all .15s; }
+  .tab.active { background: var(--card); border-color: var(--border); color: var(--text); font-weight: 500; margin-bottom: -1px; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* ─── 架构图 ─── */
+  .arch-wrap { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; overflow-x: auto; }
+  .layer { border-radius: 10px; margin-bottom: 16px; padding: 14px 16px 12px; }
+  .layer-title { font-weight: 600; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; margin-bottom: 10px; }
+  .layer-subtitle { font-size: 11px; opacity: .7; margin-left: 8px; font-weight: 400; text-transform: none; letter-spacing: 0; }
+  .layer-boxes { display: flex; gap: 10px; flex-wrap: wrap; }
+  .arch-box { flex: 1; min-width: 130px; background: rgba(255,255,255,.55); border: 1px solid rgba(0,0,0,.08); border-radius: 8px; padding: 10px 12px; }
+  .arch-box .bname { font-weight: 600; font-size: 13px; margin-bottom: 2px; }
+  .arch-box .bdesc { font-size: 11px; opacity: .75; }
+  .layer.client { background: var(--blue-light); color: #0C447C; }
+  .layer.nginx  { background: var(--gray-light); color: #2C2C2A; }
+  .layer.server { background: var(--teal-light); color: #085041; }
+  .layer.data   { display: flex; gap: 12px; background: transparent; padding: 0; margin-bottom: 0; }
+  .data-box { flex: 1; border-radius: 10px; padding: 14px 16px; }
+  .data-box.redis  { background: var(--amber-light); color: var(--amber); }
+  .data-box.mysql  { background: var(--coral-light); color: var(--coral); }
+  .data-box.pm2    { background: var(--gray-light); color: #444441; }
+  .data-box .dtitle{ font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+  .data-box .ditem { font-size: 11px; opacity: .8; margin-top: 2px; }
+  .conn { text-align: center; padding: 6px 0; color: var(--blue); font-size: 12px; font-weight: 500; }
+  .conn::before { content: "↕ "; }
+
+  /* ─── 经济闭环 ─── */
+  .eco-grid { display: grid; grid-template-columns: 1fr 60px 1fr; gap: 0; align-items: start; margin-bottom: 28px; }
+  .eco-col { display: flex; flex-direction: column; gap: 10px; }
+  .eco-item { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 13px; display: flex; align-items: center; gap: 10px; }
+  .eco-item .icon { font-size: 18px; width: 28px; text-align: center; flex-shrink: 0; }
+  .eco-item .ename { font-size: 13px; font-weight: 500; }
+  .eco-item .edesc { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .eco-center { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; height: 100%; }
+  .pool-box { border-radius: 8px; padding: 8px 6px; text-align: center; font-size: 11px; font-weight: 600; width: 56px; }
+  .pool-soft { background: var(--amber-light); color: var(--amber); }
+  .pool-hard { background: var(--purple-light); color: var(--purple); }
+  .arrow-v { color: var(--muted); font-size: 16px; line-height: 1; }
+  .eco-consume { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .consume-item { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 13px; }
+  .consume-item .ctitle { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+  .consume-item .ctag  { display: inline-block; font-size: 10px; padding: 1px 7px; border-radius: 10px; margin-right: 4px; margin-bottom: 3px; }
+  .tag-soft  { background: var(--amber-light); color: var(--amber); }
+  .tag-hard  { background: var(--purple-light); color: var(--purple); }
+  .eco-section-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 10px; margin-top: 4px; }
+  .multiplier-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .multiplier-table th { text-align: left; padding: 6px 10px; background: var(--gray-light); font-weight: 600; }
+  .multiplier-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  .multiplier-table tr:last-child td { border-bottom: none; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 10px; }
+  .badge-up   { background: var(--green-light); color: var(--green); }
+  .badge-down { background: #FCE8E8; color: #A32D2D; }
+  .badge-info { background: var(--blue-light); color: var(--blue); }
+
+  /* ─── UI 线框图 ─── */
+  .wf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+  .screen { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .screen-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 8px 14px; background: var(--gray-light); border-bottom: 1px solid var(--border); }
+  .phone { background: #18181B; border-radius: 8px; margin: 12px; padding: 0; overflow: hidden; min-height: 340px; }
+  .status-bar { background: #111; padding: 4px 12px; display: flex; justify-content: space-between; align-items: center; }
+  .status-bar span { color: #aaa; font-size: 9px; }
+  .nav-bar { padding: 8px 12px 4px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #2a2a2d; }
+  .nav-bar .nav-title { color: #f4f4f5; font-size: 13px; font-weight: 600; flex: 1; text-align: center; }
+  .nav-back { color: #60a5fa; font-size: 11px; }
+  .phone-body { padding: 12px; }
+  /* Lobby */
+  .wf-logo { text-align: center; padding: 16px 0 10px; }
+  .wf-logo .lt { color: #f59e0b; font-size: 18px; font-weight: 700; }
+  .wf-logo .ls { color: #888; font-size: 10px; margin-top: 2px; }
+  .wf-btn { background: #3b82f6; color: #fff; border-radius: 6px; padding: 9px; text-align: center; font-size: 12px; font-weight: 600; margin-bottom: 8px; cursor: pointer; }
+  .wf-btn.outline { background: transparent; border: 1px solid #3b3b3f; color: #d4d4d8; }
+  .wf-btn.gold { background: linear-gradient(90deg,#b45309,#d97706); }
+  .stats-row { display: flex; gap: 6px; margin-bottom: 10px; }
+  .stat-box { flex: 1; background: #27272a; border-radius: 6px; padding: 7px; text-align: center; }
+  .stat-box .sv { color: #f4f4f5; font-size: 14px; font-weight: 700; }
+  .stat-box .sl { color: #888; font-size: 9px; margin-top: 1px; }
+  /* Room */
+  .seat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
+  .seat { background: #27272a; border-radius: 6px; padding: 8px; display: flex; align-items: center; gap: 6px; }
+  .seat.me { border: 1px solid #3b82f6; }
+  .seat.empty { border: 1px dashed #3b3b3f; justify-content: center; }
+  .avatar { width: 26px; height: 26px; border-radius: 50%; background: #3b82f6; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 10px; font-weight: 700; flex-shrink: 0; }
+  .avatar.gold { background: #d97706; }
+  .avatar.empty2 { background: #3b3b3f; }
+  .seat-name { color: #d4d4d8; font-size: 10px; font-weight: 500; }
+  .seat-ready { color: #22c55e; font-size: 9px; }
+  .seat-wait  { color: #888; font-size: 9px; }
+  /* Game table */
+  .table-area { background: #14532d; border-radius: 8px; padding: 10px; margin-bottom: 8px; min-height: 140px; position: relative; }
+  .opponent-row { display: flex; justify-content: space-around; margin-bottom: 8px; }
+  .opp { text-align: center; }
+  .opp .oav { width: 28px; height: 28px; border-radius: 50%; margin: 0 auto 2px; background: #374151; display: flex; align-items: center; justify-content: center; color: #9ca3af; font-size: 9px; }
+  .opp .oav.landlord { background: #d97706; color: #fff; }
+  .opp .oname { color: #9ca3af; font-size: 8px; }
+  .opp .ocount { color: #6ee7b7; font-size: 8px; }
+  .opp .badge-secret { background: #1e3a5f; color: #60a5fa; font-size: 7px; padding: 1px 4px; border-radius: 3px; margin-top: 1px; }
+  .center-play { background: rgba(0,0,0,.3); border-radius: 6px; padding: 8px; margin: 4px 0; text-align: center; min-height: 32px; }
+  .play-label { color: #9ca3af; font-size: 9px; margin-bottom: 3px; }
+  .cards-row { display: flex; gap: 3px; justify-content: center; }
+  .mini-card { background: #fff; color: #1a1a18; border-radius: 3px; padding: 2px 4px; font-size: 9px; font-weight: 700; }
+  .mini-card.red { color: #dc2626; }
+  .timer-bar { position: absolute; top: 8px; right: 8px; }
+  .timer-ring { width: 22px; height: 22px; border: 2px solid #22c55e; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #22c55e; font-size: 8px; font-weight: 700; }
+  .hand-area { }
+  .hand-label { color: #888; font-size: 9px; margin-bottom: 4px; }
+  .hand-cards { display: flex; gap: -2px; flex-wrap: wrap; gap: 2px; margin-bottom: 6px; }
+  .hand-card { background: #fff; color: #1a1a18; border-radius: 4px; padding: 3px 5px; font-size: 10px; font-weight: 700; border: 1px solid #ddd; }
+  .hand-card.red { color: #dc2626; }
+  .hand-card.selected { transform: translateY(-4px); border-color: #3b82f6; box-shadow: 0 2px 8px rgba(59,130,246,.4); }
+  .action-row { display: flex; gap: 6px; }
+  .act-btn { flex: 1; padding: 6px; border-radius: 5px; text-align: center; font-size: 10px; font-weight: 600; }
+  .act-btn.play { background: #3b82f6; color: #fff; }
+  .act-btn.hint { background: #374151; color: #9ca3af; }
+  .act-btn.pass { background: #374151; color: #ef4444; }
+  /* CodeCard selector */
+  .cc-info { background: #1c1c1f; border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; }
+  .cc-info .ci { color: #f59e0b; font-size: 11px; font-weight: 600; margin-bottom: 3px; }
+  .cc-info .cd { color: #9ca3af; font-size: 9px; line-height: 1.4; }
+  .cc-suits { display: flex; gap: 4px; margin-bottom: 6px; }
+  .suit-btn { flex: 1; padding: 6px; border-radius: 5px; text-align: center; font-size: 13px; background: #27272a; border: 1px solid #3b3b3f; cursor: pointer; }
+  .suit-btn.active { border-color: #3b82f6; background: #1e3a5f; }
+  .suit-btn.red-suit { color: #ef4444; }
+  .cc-nums { display: flex; gap: 3px; flex-wrap: wrap; }
+  .num-btn { flex: 1; min-width: 24px; padding: 5px 3px; border-radius: 4px; text-align: center; font-size: 10px; font-weight: 600; background: #27272a; border: 1px solid #3b3b3f; color: #d4d4d8; cursor: pointer; }
+  .num-btn.active { background: #1e3a5f; border-color: #3b82f6; color: #60a5fa; }
+  .cc-preview { background: #1e3a5f; border-radius: 5px; padding: 7px; text-align: center; margin-bottom: 8px; }
+  .cc-preview .pv { color: #60a5fa; font-size: 14px; font-weight: 700; }
+  .cc-preview .pl { color: #9ca3af; font-size: 9px; }
+  /* Settlement */
+  .settle-banner { background: linear-gradient(135deg,#1e3a5f,#0f2744); border-radius: 6px; padding: 12px; text-align: center; margin-bottom: 8px; }
+  .settle-win { color: #f59e0b; font-size: 15px; font-weight: 700; margin-bottom: 2px; }
+  .settle-sub { color: #9ca3af; font-size: 10px; }
+  .reveal-row { background: #1c1c1f; border-radius: 6px; padding: 8px 10px; margin-bottom: 6px; }
+  .reveal-row .rt { color: #d4d4d8; font-size: 11px; font-weight: 500; margin-bottom: 4px; }
+  .reveal-players { display: flex; gap: 6px; }
+  .rp { text-align: center; flex: 1; }
+  .rp .rav { width: 24px; height: 24px; border-radius: 50%; margin: 0 auto 2px; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 700; }
+  .rav.gold { background: #d97706; color: #fff; }
+  .rav.blue { background: #1d4ed8; color: #fff; }
+  .rav.gray { background: #374151; color: #9ca3af; }
+  .rp .rname { color: #9ca3af; font-size: 8px; }
+  .rp .rrole { font-size: 7px; padding: 1px 4px; border-radius: 3px; margin-top: 1px; display: inline-block; }
+  .role-land { background: #7c2d12; color: #fb923c; }
+  .role-part { background: #1e3a5f; color: #60a5fa; }
+  .role-civ  { background: #27272a; color: #888; }
+  .score-list { }
+  .score-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid #2a2a2d; }
+  .score-row:last-child { border-bottom: none; }
+  .score-row .sr-name { color: #d4d4d8; font-size: 10px; }
+  .score-row .sr-delta { font-size: 11px; font-weight: 700; }
+  .sr-plus  { color: #22c55e; }
+  .sr-minus { color: #ef4444; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>明暗斗地主 — 项目可视化图表</h1>
+  <p class="subtitle">系统架构 · 经济闭环 · UI 线框图  |  v1.0</p>
+
+  <div class="tabs">
+    <div class="tab active" onclick="showTab('arch')">系统架构图</div>
+    <div class="tab" onclick="showTab('eco')">经济系统闭环</div>
+    <div class="tab" onclick="showTab('wire')">UI 线框图</div>
+  </div>
+
+  <!-- ═══ TAB 1: 架构图 ═══ -->
+  <div class="panel active" id="tab-arch">
+    <div class="arch-wrap">
+
+      <div class="layer client">
+        <div class="layer-title">客户端层 <span class="layer-subtitle">Cocos Creator 3.8 · TypeScript · 微信小程序 / H5 / Android / iOS</span></div>
+        <div class="layer-boxes">
+          <div class="arch-box">
+            <div class="bname">oops-framework</div>
+            <div class="bdesc">资源管理 · UI管理<br>音频 · 场景切换</div>
+          </div>
+          <div class="arch-box">
+            <div class="bname">FairyGUI</div>
+            <div class="bdesc">卡牌动效 · 手牌排列<br>复杂 UI 组件</div>
+          </div>
+          <div class="arch-box">
+            <div class="bname">NetManager</div>
+            <div class="bdesc">Colyseus.js 封装<br>房间状态监听</div>
+          </div>
+          <div class="arch-box">
+            <div class="bname">shared/ 模块</div>
+            <div class="bdesc">牌型识别预检<br>暗号牌工具函数</div>
+          </div>
+          <div class="arch-box">
+            <div class="bname">GameController</div>
+            <div class="bdesc">客户端状态机<br>出牌/身份事件</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="conn">WSS / TLS 全程加密</div>
+
+      <div class="layer nginx">
+        <div class="layer-title">反向代理层 <span class="layer-subtitle">Nginx stable · HTTPS/WSS 终止 · 静态资源 CDN</span></div>
+        <div class="layer-boxes">
+          <div class="arch-box">
+            <div class="bname">WSS 转发</div>
+            <div class="bdesc">proxy_pass → Colyseus<br>proxy_read_timeout 600s</div>
+          </div>
+          <div class="arch-box">
+            <div class="bname">TLS 终止</div>
+            <div class="bdesc">Let's Encrypt 证书<br>HSTS 强制 HTTPS</div>
+          </div>
+          <div class="arch-box">
+            <div class="bname">负载均衡</div>
+            <div class="bdesc">upstream 多实例<br>扩容时启用</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="conn">HTTP → game-server:2567</div>
+
+      <div class="layer server">
+        <div class="layer-title">游戏服务器层 <span class="layer-subtitle">Node.js 20 LTS · Colyseus 0.15+ · TypeScript · Docker</span></div>
+        <div class="layer-boxes">
+          <div class="arch-box">
+            <div class="bname">CardRoom</div>
+            <div class="bdesc">房间主逻辑<br>Colyseus Room 子类</div>
+          </div>
+          <div class="arch-box">
+            <div class="bname">GameState Schema</div>
+            <div class="bdesc">状态自动 diff 同步<br>手牌私密隔离</div>
+          </div>
+          <div class="arch-box">
+            <div class="bname">CardPatternEngine</div>
+            <div class="bdesc">牌型识别 · 炸弹<br>王炸 · 压牌校验</div>
+          </div>
+          <div class="arch-box">
+            <div class="bname">CodeCard</div>
+            <div class="bdesc">暗号队友确认<br>一挑四判定</div>
+          </div>
+          <div class="arch-box">
+            <div class="bname">MatchMaker</div>
+            <div class="bdesc">段位撮合<br>AI 补位</div>
+          </div>
+          <div class="arch-box">
+            <div class="bname">AuthService</div>
+            <div class="bdesc">微信 code 换 openid<br>JWT 会话签发</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="conn">读写 Redis · MySQL</div>
+
+      <div class="layer data">
+        <div class="data-box redis">
+          <div class="dtitle">Redis 7</div>
+          <div class="ditem">🗂 房间状态快照 (崩溃恢复)</div>
+          <div class="ditem">👤 会话缓存 TTL 24h</div>
+          <div class="ditem">🏆 排行榜 ZSet</div>
+          <div class="ditem">🔀 匹配队列 List</div>
+          <div class="ditem">📊 在线人数计数</div>
+        </div>
+        <div class="data-box mysql">
+          <div class="dtitle">MySQL 8.0</div>
+          <div class="ditem">👥 users (openid, 积分, 段位)</div>
+          <div class="ditem">🃏 game_records (对局结果)</div>
+          <div class="ditem">📋 game_players (明细)</div>
+          <div class="ditem">💳 orders (支付订单)</div>
+          <div class="ditem">🔑 索引: score, openid</div>
+        </div>
+        <div class="data-box pm2">
+          <div class="dtitle">PM2 + Docker</div>
+          <div class="ditem">🐳 docker-compose 编排</div>
+          <div class="ditem">♻️ 进程崩溃自动重启</div>
+          <div class="ditem">📝 结构化日志 JSON</div>
+          <div class="ditem">📈 内存上限 1G 重启</div>
+          <div class="ditem">🔒 AOF + RDB 持久化</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══ TAB 2: 经济闭环 ═══ -->
+  <div class="panel" id="tab-eco">
+
+    <p class="eco-section-title">货币产出来源</p>
+    <div class="eco-grid">
+      <div class="eco-col">
+        <div class="eco-item">
+          <div class="icon">🏆</div>
+          <div><div class="ename">对局胜利</div><div class="edesc">胜利 +50 金币；败局 ±0</div></div>
+        </div>
+        <div class="eco-item">
+          <div class="icon">📋</div>
+          <div><div class="ename">每日任务</div><div class="edesc">3 个任务 × 100 = +300 金币</div></div>
+        </div>
+        <div class="eco-item">
+          <div class="icon">📅</div>
+          <div><div class="ename">登录奖励</div><div class="edesc">每日首登 +50 金币</div></div>
+        </div>
+        <div class="eco-item">
+          <div class="icon">📺</div>
+          <div><div class="ename">激励广告</div><div class="edesc">3 次 × 30 = +90 金币</div></div>
+        </div>
+        <div class="eco-item">
+          <div class="icon">💳</div>
+          <div><div class="ename">充值</div><div class="edesc">人民币 → 钻石</div></div>
+        </div>
+        <div class="eco-item">
+          <div class="icon">🎁</div>
+          <div><div class="ename">活动赠送</div><div class="edesc">节日/赛季活动</div></div>
+        </div>
+      </div>
+
+      <div class="eco-center">
+        <div class="pool-box pool-soft">金币<br>软通货</div>
+        <div class="arrow-v">↕</div>
+        <div class="pool-box pool-hard">钻石<br>硬通货</div>
+      </div>
+
+      <div class="eco-col">
+        <div class="eco-item">
+          <div class="icon">🎨</div>
+          <div><div class="ename">普通皮肤</div><div class="edesc">2000–5000 金币 (3–7天产出)</div></div>
+        </div>
+        <div class="eco-item">
+          <div class="icon">🃏</div>
+          <div><div class="ename">房卡</div><div class="edesc">金币购买或 1–6元直充</div></div>
+        </div>
+        <div class="eco-item">
+          <div class="icon">😀</div>
+          <div><div class="ename">表情道具</div><div class="edesc">金币消耗</div></div>
+        </div>
+        <div class="eco-item">
+          <div class="icon">💎</div>
+          <div><div class="ename">稀有皮肤</div><div class="edesc">钻石直购或抽奖</div></div>
+        </div>
+        <div class="eco-item">
+          <div class="icon">👑</div>
+          <div><div class="ename">月度会员</div><div class="edesc">15 元/月，去广告+专属</div></div>
+        </div>
+        <div class="eco-item">
+          <div class="icon">🎰</div>
+          <div><div class="ename">限定抽奖</div><div class="edesc">钻石抽取 · 保底机制</div></div>
+        </div>
+      </div>
+    </div>
+
+    <p class="eco-section-title">积分倍率体系</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
+      <div>
+        <table class="multiplier-table">
+          <tr><th>倍率来源</th><th>倍率</th><th>叠加</th></tr>
+          <tr><td>标准模式</td><td><span class="badge badge-info">×1</span></td><td>基准</td></tr>
+          <tr><td>一挑四模式</td><td><span class="badge badge-up">×2</span></td><td>替换</td></tr>
+          <tr><td>每个炸弹</td><td><span class="badge badge-up">×2</span></td><td>累乘</td></tr>
+          <tr><td>每个王炸</td><td><span class="badge badge-up">×3</span></td><td>累乘</td></tr>
+          <tr><td>八张炸弹</td><td><span class="badge badge-up">×4</span></td><td>替换</td></tr>
+        </table>
+      </div>
+      <div>
+        <table class="multiplier-table">
+          <tr><th>对局结果</th><th>地主</th><th>平民/人</th></tr>
+          <tr><td>标准·地主赢</td><td><span class="badge badge-up">+2份</span></td><td><span class="badge badge-down">-1份</span></td></tr>
+          <tr><td>标准·平民赢</td><td><span class="badge badge-down">-2份</span></td><td><span class="badge badge-up">+1.3份</span></td></tr>
+          <tr><td>一挑四·地主赢</td><td><span class="badge badge-up">+8份</span></td><td><span class="badge badge-down">-2份</span></td></tr>
+          <tr><td>一挑四·地主负</td><td><span class="badge badge-down">-4份</span></td><td><span class="badge badge-up">+1份</span></td></tr>
+        </table>
+        <p style="font-size:11px;color:var(--muted);margin-top:6px">1份 = 基础分(100) × 总倍率</p>
+      </div>
+    </div>
+
+    <p class="eco-section-title">设计原则</p>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px">
+        <div style="font-weight:600;font-size:13px;margin-bottom:4px">🔒 外观付费</div>
+        <div style="font-size:11px;color:var(--muted)">商业化仅售外观，不影响对局公平。严禁 Pay-to-Win 道具。</div>
+      </div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px">
+        <div style="font-weight:600;font-size:13px;margin-bottom:4px">⚖️ 货币隔离</div>
+        <div style="font-size:11px;color:var(--muted)">金币与钻石严格隔离，金币无法直购稀有内容，保护付费深度。</div>
+      </div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px">
+        <div style="font-weight:600;font-size:13px;margin-bottom:4px">🎯 可达成目标</div>
+        <div style="font-size:11px;color:var(--muted)">普通皮肤 3–7 天活跃可得，非付费玩家有持续激励。</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══ TAB 3: UI 线框图 ═══ -->
+  <div class="panel" id="tab-wire">
+    <div class="wf-grid">
+
+      <!-- 1. 主大厅 -->
+      <div class="screen">
+        <div class="screen-title">① 主大厅</div>
+        <div class="phone">
+          <div class="status-bar"><span>9:41</span><span>🔋 100%</span></div>
+          <div class="phone-body">
+            <div class="wf-logo">
+              <div class="lt">明暗斗地主</div>
+              <div class="ls">段位：黄金 · 积分 2340</div>
+            </div>
+            <div class="stats-row">
+              <div class="stat-box"><div class="sv">142</div><div class="sl">总局数</div></div>
+              <div class="stat-box"><div class="sv">58%</div><div class="sl">胜率</div></div>
+              <div class="stat-box"><div class="sv">23</div><div class="sl">炸弹</div></div>
+            </div>
+            <div class="wf-btn gold">⚡ 快速匹配</div>
+            <div class="wf-btn outline">🏠 创建好友房</div>
+            <div class="wf-btn outline">🔑 加入房间</div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <div class="wf-btn outline" style="font-size:10px">🏆 排行</div>
+              <div class="wf-btn outline" style="font-size:10px">🛍 商城</div>
+              <div class="wf-btn outline" style="font-size:10px">👤 我的</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. 好友房间 -->
+      <div class="screen">
+        <div class="screen-title">② 好友房间</div>
+        <div class="phone">
+          <div class="status-bar"><span>9:41</span><span>🔋 100%</span></div>
+          <div class="nav-bar">
+            <span class="nav-back">‹ 返回</span>
+            <span class="nav-title">房间 #A38K2F</span>
+          </div>
+          <div class="phone-body">
+            <div class="seat-grid">
+              <div class="seat me">
+                <div class="avatar">我</div>
+                <div><div class="seat-name">玩家小明</div><div class="seat-ready">✓ 已准备</div></div>
+              </div>
+              <div class="seat">
+                <div class="avatar gold">L</div>
+                <div><div class="seat-name">阿强</div><div class="seat-ready">✓ 已准备</div></div>
+              </div>
+              <div class="seat">
+                <div class="avatar" style="background:#7c3aed">小</div>
+                <div><div class="seat-name">晓丽</div><div class="seat-wait">等待中…</div></div>
+              </div>
+              <div class="seat empty"><div style="color:#555;font-size:10px">+ 等待加入</div></div>
+              <div class="seat empty"><div style="color:#555;font-size:10px">+ 等待加入</div></div>
+            </div>
+            <div style="background:#1c1c1f;border-radius:6px;padding:8px;margin-bottom:8px;font-size:10px;color:#888;text-align:center">
+              房间码：<span style="color:#f59e0b;font-weight:700;letter-spacing:2px">A38K2F</span><br>
+              <span style="font-size:9px">点击复制分享给好友</span>
+            </div>
+            <div class="wf-btn" style="background:#374151;color:#9ca3af;font-size:11px">邀请好友 🔗</div>
+            <div class="wf-btn" style="opacity:.4;font-size:11px">等待所有人准备 (3/5)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. 暗号牌选择 -->
+      <div class="screen">
+        <div class="screen-title">③ 暗号牌选择（地主）</div>
+        <div class="phone">
+          <div class="status-bar"><span>9:41</span><span>🔋 100%</span></div>
+          <div class="nav-bar">
+            <span class="nav-title">🎯 指定暗号牌</span>
+          </div>
+          <div class="phone-body">
+            <div class="cc-info">
+              <div class="ci">你是地主！</div>
+              <div class="cd">从 3–10 中选一张具体花色牌。<br>持有另一张相同牌的玩家将成为你的暗队友（开局不公开）。</div>
+            </div>
+            <div style="font-size:10px;color:#888;margin-bottom:5px">选择花色</div>
+            <div class="cc-suits">
+              <div class="suit-btn">♠</div>
+              <div class="suit-btn red-suit active">♥</div>
+              <div class="suit-btn red-suit">♦</div>
+              <div class="suit-btn">♣</div>
+            </div>
+            <div style="font-size:10px;color:#888;margin-bottom:5px">选择点数（3–10）</div>
+            <div class="cc-nums">
+              <div class="num-btn">3</div>
+              <div class="num-btn">4</div>
+              <div class="num-btn">5</div>
+              <div class="num-btn">6</div>
+              <div class="num-btn active">7</div>
+              <div class="num-btn">8</div>
+              <div class="num-btn">9</div>
+              <div class="num-btn">10</div>
+            </div>
+            <div style="height:8px"></div>
+            <div class="cc-preview">
+              <div class="pv">♥ 7</div>
+              <div class="pl">红桃7 · 持有另一张的玩家为暗队友</div>
+            </div>
+            <div class="wf-btn">确认暗号牌 ✓</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. 对局中 -->
+      <div class="screen">
+        <div class="screen-title">④ 对局进行中</div>
+        <div class="phone">
+          <div class="status-bar"><span>9:41</span><span>🔋 100%</span></div>
+          <div class="phone-body" style="padding:8px">
+            <div class="table-area">
+              <div class="timer-bar"><div class="timer-ring">24</div></div>
+              <div class="opponent-row">
+                <div class="opp">
+                  <div class="oav landlord">L</div>
+                  <div class="oname">阿强(地主)</div>
+                  <div class="ocount">18张</div>
+                </div>
+                <div class="opp">
+                  <div class="oav">小</div>
+                  <div class="oname">晓丽</div>
+                  <div class="ocount">21张</div>
+                  <div class="badge-secret">身份隐藏</div>
+                </div>
+                <div class="opp">
+                  <div class="oav" style="background:#7c3aed;color:#fff">P</div>
+                  <div class="oname">小宇</div>
+                  <div class="ocount">21张</div>
+                </div>
+                <div class="opp">
+                  <div class="oav" style="background:#374151;color:#9ca3af">Q</div>
+                  <div class="oname">大鹏</div>
+                  <div class="ocount">20张</div>
+                </div>
+              </div>
+              <div class="center-play">
+                <div class="play-label">阿强出牌</div>
+                <div class="cards-row">
+                  <div class="mini-card">K</div>
+                  <div class="mini-card">K</div>
+                  <div class="mini-card">K</div>
+                </div>
+              </div>
+            </div>
+            <div class="hand-area">
+              <div class="hand-label">我的手牌（19张）· 轮到我出牌</div>
+              <div class="hand-cards">
+                <div class="hand-card">3</div>
+                <div class="hand-card">5</div>
+                <div class="hand-card red selected">♥7</div>
+                <div class="hand-card">8</div>
+                <div class="hand-card">9</div>
+                <div class="hand-card">J</div>
+                <div class="hand-card selected">J</div>
+                <div class="hand-card selected">J</div>
+                <div class="hand-card">Q</div>
+                <div class="hand-card">A</div>
+              </div>
+              <div class="action-row">
+                <div class="act-btn hint">💡 提示</div>
+                <div class="act-btn play">出牌 (JJJ)</div>
+                <div class="act-btn pass">不要</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. 身份揭晓弹窗 -->
+      <div class="screen">
+        <div class="screen-title">⑤ 暗队友身份揭晓</div>
+        <div class="phone">
+          <div class="status-bar"><span>9:41</span><span>🔋 100%</span></div>
+          <div class="phone-body" style="padding:8px">
+            <div class="table-area" style="min-height:80px;margin-bottom:8px">
+              <div style="text-align:center;padding:8px 0">
+                <div style="color:#9ca3af;font-size:9px;margin-bottom:4px">晓丽打出</div>
+                <div class="cards-row" style="justify-content:center">
+                  <div class="mini-card red" style="font-size:11px;padding:4px 7px">♥7</div>
+                </div>
+              </div>
+            </div>
+            <div style="background:linear-gradient(135deg,#1e3a5f,#1a3a2f);border-radius:8px;padding:14px;text-align:center;border:1px solid #2563eb;margin-bottom:8px">
+              <div style="font-size:18px;margin-bottom:4px">🎭</div>
+              <div style="color:#60a5fa;font-size:14px;font-weight:700;margin-bottom:3px">暗队友揭晓！</div>
+              <div style="color:#fff;font-size:13px;font-weight:600">晓丽</div>
+              <div style="color:#9ca3af;font-size:10px;margin-top:3px">是地主阿强的暗队友</div>
+              <div style="display:flex;justify-content:center;gap:12px;margin-top:10px">
+                <div style="text-align:center">
+                  <div style="width:28px;height:28px;border-radius:50%;background:#d97706;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto 3px">L</div>
+                  <div style="color:#f59e0b;font-size:9px">地主</div>
+                  <div style="color:#9ca3af;font-size:9px">阿强</div>
+                </div>
+                <div style="color:#6ee7b7;font-size:18px;align-self:center">+</div>
+                <div style="text-align:center">
+                  <div style="width:28px;height:28px;border-radius:50%;background:#1d4ed8;color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto 3px">暗</div>
+                  <div style="color:#60a5fa;font-size:9px">暗队友</div>
+                  <div style="color:#9ca3af;font-size:9px">晓丽</div>
+                </div>
+                <div style="color:#6ee7b7;font-size:18px;align-self:center">vs</div>
+                <div style="text-align:center">
+                  <div style="width:28px;height:28px;border-radius:50%;background:#374151;color:#9ca3af;font-size:9px;display:flex;align-items:center;justify-content:center;margin:0 auto 3px">×3</div>
+                  <div style="color:#9ca3af;font-size:9px">平民</div>
+                  <div style="color:#9ca3af;font-size:9px">三人</div>
+                </div>
+              </div>
+            </div>
+            <div class="wf-btn outline" style="font-size:11px">继续游戏 →</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 6. 结算 -->
+      <div class="screen">
+        <div class="screen-title">⑥ 对局结算</div>
+        <div class="phone">
+          <div class="status-bar"><span>9:41</span><span>🔋 100%</span></div>
+          <div class="phone-body">
+            <div class="settle-banner">
+              <div class="settle-win">🎉 平民阵营胜利！</div>
+              <div class="settle-sub">大鹏 第一个出完手牌 · 本局倍率 ×4</div>
+            </div>
+            <div class="reveal-row">
+              <div class="rt">阵营揭晓</div>
+              <div class="reveal-players">
+                <div class="rp">
+                  <div class="rav gold">L</div>
+                  <div class="rname">阿强</div>
+                  <div class="rrole role-land">地主</div>
+                </div>
+                <div class="rp">
+                  <div class="rav blue">暗</div>
+                  <div class="rname">晓丽</div>
+                  <div class="rrole role-part">暗队友</div>
+                </div>
+                <div class="rp">
+                  <div class="rav gray">民</div>
+                  <div class="rname">小明</div>
+                  <div class="rrole role-civ">平民</div>
+                </div>
+                <div class="rp">
+                  <div class="rav gray">民</div>
+                  <div class="rname">大鹏</div>
+                  <div class="rrole role-civ">平民🥇</div>
+                </div>
+                <div class="rp">
+                  <div class="rav gray">民</div>
+                  <div class="rname">小宇</div>
+                  <div class="rrole role-civ">平民</div>
+                </div>
+              </div>
+            </div>
+            <div class="score-list">
+              <div class="score-row"><span class="sr-name">大鹏</span><span class="sr-delta sr-plus">+400</span></div>
+              <div class="score-row"><span class="sr-name">小明</span><span class="sr-delta sr-plus">+400</span></div>
+              <div class="score-row"><span class="sr-name">小宇</span><span class="sr-delta sr-plus">+400</span></div>
+              <div class="score-row"><span class="sr-name">阿强（地主）</span><span class="sr-delta sr-minus">-800</span></div>
+              <div class="score-row"><span class="sr-name">晓丽（暗队友）</span><span class="sr-delta sr-minus">-800</span></div>
+            </div>
+            <div style="height:8px"></div>
+            <div class="wf-btn gold">再来一局</div>
+            <div class="wf-btn outline" style="font-size:11px">返回大厅</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+function showTab(id) {
+  document.querySelectorAll('.tab').forEach((t,i)=>{
+    const ids = ['arch','eco','wire'];
+    t.classList.toggle('active', ids[i]===id);
+  });
+  document.querySelectorAll('.panel').forEach(p=>{
+    p.classList.toggle('active', p.id==='tab-'+id);
+  });
+}
+</script>
+</body>
+</html>
