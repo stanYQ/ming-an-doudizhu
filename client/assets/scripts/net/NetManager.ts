@@ -1,12 +1,18 @@
-import { Client, Room } from 'colyseus.js';
 import { message } from 'db://oops-framework/core/common/event/MessageManager';
 
+// Colyseus is loaded via assets/plugins/colyseus-bundle.js (self-contained IIFE plugin).
+// That file sets globalThis.colyseus = { Client, Room, ... } before any game scripts run.
+// In Jest: tests set globalThis.colyseus = { Client: MockClient } in beforeEach.
+function _colyseus(): any {
+    return (globalThis as any).colyseus;
+}
+
 export class NetManager {
-    private client!: Client;
-    private room: Room | null = null;
+    private client: any = null;
+    private room: any = null;
 
     init(endpoint: string): void {
-        this.client = new Client(endpoint);
+        this.client = new (_colyseus().Client)(endpoint);
     }
 
     async joinRoom(name: string, options: any): Promise<void> {

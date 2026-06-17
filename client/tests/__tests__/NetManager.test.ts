@@ -21,7 +21,10 @@ const mockRoom = {
 
 const mockJoinOrCreate = jest.fn();
 const MockClient = jest.fn().mockImplementation(() => ({ joinOrCreate: mockJoinOrCreate }));
-jest.mock('colyseus.js', () => ({ Client: MockClient }));
+
+// NetManager reads colyseus from globalThis.colyseus (set by plugin at CC runtime).
+// In Jest we inject the mock here before module load.
+(globalThis as any).colyseus = { Client: MockClient };
 
 import { NetManager } from '../net/NetManager';
 
@@ -35,6 +38,7 @@ beforeEach(() => {
     jest.clearAllMocks();
     Object.keys(messageHandlers).forEach(k => delete messageHandlers[k]);
     stateChangeHandler = null;
+    (globalThis as any).colyseus = { Client: MockClient };
     manager = new NetManager();
 });
 

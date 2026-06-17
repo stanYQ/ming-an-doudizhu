@@ -1,7 +1,7 @@
-# 明暗斗地主 — 客户端对接指南 v1.0
+# 明暗斗地主 — 协议参考手册 v1.0
 
 > 权威来源：`server/src/` 实现，266/266 集成测试通过。  
-> 面向 Cocos Creator 3.8 + colyseus.js 客户端开发者。
+> 适用范围：client-dev（对接指南）+ server-dev（协议规范）。
 
 ---
 
@@ -532,6 +532,28 @@ DB_NAME=mingandoudizhu AUTH_MODE=stub JWT_SECRET=dev_secret npm run dev
 |------|------|
 | 本地开发 | `ws://localhost:3000` |
 | HTTP 接口 | `http://localhost:3000` |
+
+---
+
+## 13. 安全约束
+
+1. **手牌绝不入 Schema**：服务端内存保存 `Map<sessionId, number[]>`，通过私发 `your_hand` 下发，不广播，不出现在 Colyseus Schema 中。
+2. **角色/身份延迟揭露**：`role` 字段在 `select_code_card` 完成后才写入 Schema；`revealed` 在打出暗号牌后才变 `true`。任何时候客户端都无法提前获知暗队友身份。
+3. **JWT 强制校验**：每次 WebSocket 连接都经过 `CardRoom.static.onAuth` 验证，无效 token 直接拒绝连接（`MatchMakeError {code: 3001}`）。
+4. **回合强制**：服务端验证 `seatIndex === currentTurnSeat`，客户端无法绕过（error 1003）。
+
+---
+
+## 14. 集成测试命令
+
+```bash
+# 仅跑集成测试（需要 MySQL + Redis 在线）
+npx jest --testPathPattern="integration" --no-coverage --forceExit
+
+# 全套（单元 + 集成）
+npx jest --no-coverage --forceExit
+# 当前结果：266/266 通过
+```
 
 ---
 

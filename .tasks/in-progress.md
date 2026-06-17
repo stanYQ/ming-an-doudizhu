@@ -10,3 +10,4 @@
 
 ## 当前进行中
 
+- [ ] TASK-025 [server] 实现 CardDecomposer：手牌拆分引擎（decompose / minTurns / generateAll）| 认领: server-dev | 开始: 2026-06-17
