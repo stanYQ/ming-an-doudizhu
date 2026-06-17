@@ -43,8 +43,13 @@
 - [x] TASK-021 [server] 实现 Logger + 埋点：结构化日志 + 关键事件埋点 → spec: specs/logging-monitor.md **[done]**
 - [x] TASK-020 [server] 实现 AIPlayer：补位/托管出牌策略 → spec: specs/ai-player.md **[done]** 241/241 tests
 
-## P3+ 任务（计划书 V1.1 数值体系，依赖 P1/P2 完成）
+## P4.1 任务（AI 升级 + 数值校准，串行执行）
 
-- [ ] TASK-024 [server] 数值模拟校准：≥10万局 AI 对局，验证地主方胜率 45%–55% → spec: specs/simulation-calibration.md **[ready]** ⚠️ P1 里程碑 Gate，TASK-022 实现前完成
-- [ ] TASK-023 [server] CardRoom 加倍阶段：新增 doubling 状态 + 协议消息 → spec: specs/doubling-phase.md **[ready]** （前置：TASK-024 Gate 通过）
-- [ ] TASK-022 [server] SettleService V2：倍数计分体系重写（零和+场次底分+个人加倍）→ spec: specs/scoring-v2.md **[ready]** （前置：TASK-023 done）
+- [ ] TASK-025 [server] 实现 CardDecomposer：手牌拆分引擎（枚举所有合法牌型）→ spec: specs/card-decomposer.md **[ready]**
+- [ ] TASK-026 [server] 实现 AIPlayer V2：Tier 1 启发式策略（替换保守 AI）→ spec: specs/smart-ai-player.md **[ready]** （前置：TASK-025）
+- [ ] TASK-024 [server] 数值模拟校准：5-AI 房间跑 ≥10万局，Gate 胜率 45%–55% → spec: specs/simulation-calibration.md **[ready]** （前置：TASK-026）⚠️ Gate 通过后解锁 TASK-023/022
+
+## P4.1+ 任务（数值体系，依赖 TASK-024 Gate 通过）
+
+- [ ] TASK-023 [server] CardRoom 加倍阶段：新增 doubling 状态 + 协议消息 → spec: specs/doubling-phase.md **[ready]** （前置：TASK-024 ✅）
+- [ ] TASK-022 [server] SettleService V2：零和倍数公式 + 场次底分 + 个人加倍 → spec: specs/scoring-v2.md **[ready]** （前置：TASK-023 done）

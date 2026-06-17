@@ -55,3 +55,16 @@
 
     globalThis.Buffer = B;
 })();
+
+// process polyfill — colyseus.js checks process.env.NODE_ENV and process.browser
+(function () {
+    if (typeof globalThis.process !== 'undefined') return;
+    globalThis.process = {
+        env: { NODE_ENV: 'production' },
+        browser: true,
+        version: '',
+        versions: {},
+        platform: 'browser',
+        nextTick: function (fn) { Promise.resolve().then(fn); },
+    };
+})();

@@ -20,3 +20,4 @@ infra/certs/
 server/coverage/
 .claude/settings.local.json
 server/.claude/
+server/tools/calibration-report.json

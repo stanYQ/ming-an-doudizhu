@@ -4,7 +4,7 @@
 **目标模块**: server（工具脚本，不入生产）  
 **优先级**: P1（里程碑验证，TASK-022 实现前完成）  
 **状态**: ready  
-**前置依赖**: TASK-008（CardRoom/RuleEngine）、TASK-020（AIPlayer）done  
+**前置依赖**: TASK-026（AIPlayer V2）done  
 **权威来源**: 项目计划书 V1.1 §6.1 + 第九章 P1 里程碑指标
 
 ---
@@ -13,6 +13,8 @@
 
 计划书 P1 里程碑要求：运行 ≥10万局程序模拟，验证地主方胜率落入 **45%–55%**，并校准一挑四倍数（默认 ×3）与结算权重。模拟结果是 TASK-022 数值参数的决策依据。此任务为工具脚本，不进入生产代码路径。
 
+**模拟结构**：脚本创建 CardRoom 实例（不启动 Colyseus 网络层），注入 5 个 AIPlayer V2（TASK-026）实例，通过 Room 的内部方法驱动对局，收集胜负数据。不直接调用 AIPlayer.decide()，而是走完整的 Room 消息流，确保规则引擎、超时、状态机均被覆盖。
+
 ---
 
 ## 验收标准
@@ -20,7 +22,7 @@
 ### 模拟执行
 
 - AC-1: 脚本可独立运行：`npx ts-node server/tools/simulate.ts --games 100000`
-- AC-2: 每局使用 AIPlayer.decide() 驱动所有 5 名玩家（无真人输入）
+- AC-2: 创建 CardRoom 实例，注入 5 个 AIPlayer V2 实例（`isAI: true`）驱动对局；不启动网络层，直接调用 Room 内部方法
 - AC-3: 每局独立随机洗牌（Deck.shuffle()，无固定 seed）
 - AC-4: 暗号牌由模拟器在合法范围（rank 0–7，suit 0–3）内随机选取
 - AC-5: 支持 `--games <n>` 参数，最小 1000，默认 100000
@@ -81,7 +83,8 @@ server/tools/
 └── calibration-report.json  ← 输出（gitignore）
 ```
 
-- `simulate.ts` 复用 `RuleEngine`、`Deck`、`AIPlayer`，不重写业务逻辑
+- `simulate.ts` 复用 `CardRoom`、`RuleEngine`、`Deck`、`AIPlayer V2`，不重写业务逻辑
+- 模拟循环：创建 Room → 加入 5 个 AI → 自动跑完一局 → 记录结果 → 销毁 Room → 重复
 - 工具脚本不引入生产代码的任何外部依赖（mysql2、ioredis 等）
 - `calibration-report.json` 加入 `.gitignore`，不提交
 

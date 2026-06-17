@@ -1,17 +1,12 @@
+import { Client, Room } from 'colyseus.js';
 import { message } from 'db://oops-framework/core/common/event/MessageManager';
 
-// Colyseus is loaded via assets/plugins/colyseus.js (CC plugin — browser-path UMD, no Node.js deps).
-// In Jest: tests set globalThis.colyseus = { Client: MockClient } in beforeEach.
-function _colyseus(): any {
-    return (globalThis as any).colyseus;
-}
-
 export class NetManager {
-    private client: any = null;
-    private room: any = null;
+    private client!: Client;
+    private room: Room | null = null;
 
     init(endpoint: string): void {
-        this.client = new (_colyseus().Client)(endpoint);
+        this.client = new Client(endpoint);
     }
 
     async joinRoom(name: string, options: any): Promise<void> {
