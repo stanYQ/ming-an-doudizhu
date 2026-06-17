@@ -1,12 +1,17 @@
-import { Client, Room } from 'colyseus.js';
 import { message } from 'db://oops-framework/core/common/event/MessageManager';
 
+// Colyseus is loaded via assets/plugins/colyseus.js (CC plugin — browser-path UMD, no Node.js deps).
+// In Jest: tests set globalThis.colyseus = { Client: MockClient } in beforeEach.
+function _colyseus(): any {
+    return (globalThis as any).colyseus;
+}
+
 export class NetManager {
-    private client!: Client;
-    private room: Room | null = null;
+    private client: any = null;
+    private room: any = null;
 
     init(endpoint: string): void {
-        this.client = new Client(endpoint);
+        this.client = new (_colyseus().Client)(endpoint);
     }
 
     async joinRoom(name: string, options: any): Promise<void> {
@@ -16,13 +21,13 @@ export class NetManager {
 
     private _registerHandlers() {
         const r = this.room!;
-        r.onMessage('your_hand',      (msg) => message.dispatchEvent('HAND',   msg));
-        r.onMessage('identity_reveal', (msg) => message.dispatchEvent('REVEAL', msg));
-        r.onMessage('game_over',       (msg) => message.dispatchEvent('OVER',   msg));
-        r.onMessage('turn_change',     (msg) => message.dispatchEvent('TURN',   msg));
-        r.onMessage('play_broadcast',  (msg) => message.dispatchEvent('PLAY',   msg));
-        r.onMessage('error',           (msg) => message.dispatchEvent('ERROR',  msg));
-        r.onStateChange((state)             => message.dispatchEvent('STATE',  state));
+        r.onMessage('your_hand',       (msg: any) => message.dispatchEvent('HAND',   msg));
+        r.onMessage('identity_reveal',  (msg: any) => message.dispatchEvent('REVEAL', msg));
+        r.onMessage('game_over',        (msg: any) => message.dispatchEvent('OVER',   msg));
+        r.onMessage('turn_change',      (msg: any) => message.dispatchEvent('TURN',   msg));
+        r.onMessage('play_broadcast',   (msg: any) => message.dispatchEvent('PLAY',   msg));
+        r.onMessage('error',            (msg: any) => message.dispatchEvent('ERROR',  msg));
+        r.onStateChange((state: any)              => message.dispatchEvent('STATE',  state));
     }
 
     playCards(cards: number[]): void {

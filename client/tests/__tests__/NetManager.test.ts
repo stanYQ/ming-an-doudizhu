@@ -21,7 +21,10 @@ const mockRoom = {
 
 const mockJoinOrCreate = jest.fn();
 const MockClient = jest.fn().mockImplementation(() => ({ joinOrCreate: mockJoinOrCreate }));
-jest.mock('colyseus.js', () => ({ Client: MockClient }));
+
+// Colyseus is no longer imported via 'colyseus.js'; it is accessed via globalThis.colyseus.
+// We set it here so NetManager.init() can find it without going through the npm package.
+(globalThis as any).colyseus = { Client: MockClient };
 
 import { NetManager } from '../net/NetManager';
 
@@ -35,6 +38,7 @@ beforeEach(() => {
     jest.clearAllMocks();
     Object.keys(messageHandlers).forEach(k => delete messageHandlers[k]);
     stateChangeHandler = null;
+    (globalThis as any).colyseus = { Client: MockClient };
     manager = new NetManager();
 });
 

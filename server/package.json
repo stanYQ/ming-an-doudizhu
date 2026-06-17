@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "test": "jest --coverage",
-    "build": "tsc"
+    "build": "tsc",
+    "start": "node dist/server/src/index.js",
+    "dev": "ts-node --project tsconfig.json src/index.ts"
   },
   "dependencies": {
     "@colyseus/schema": "^2.0.0",
@@ -13,6 +15,7 @@
     "mysql2": "^3.0.0"
   },
   "devDependencies": {
+    "@colyseus/testing": "^0.15.4",
     "@types/jest": "^29.5.0",
     "@types/node": "^20.0.0",
     "jest": "^29.0.0",

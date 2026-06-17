@@ -29,16 +29,22 @@
 
 - [x] TASK-016 [client] 横屏适配基础配置：方向锁定 + 1280×720 基准 + 安全区 + 多端验证 → spec: specs/screen-adaptation.md **[done]**
 - [x] TASK-010 [client] 实现 NetManager.ts：Colyseus 连接封装 + EventManager 消息路由 → spec: specs/net-manager.md **[done]**
-- [~] TASK-011 [client] 实现 GameController.ts：客户端状态机（7状态）+ 消息驱动 → spec: specs/game-controller.md **[in-progress]** （client-dev 认领 2026-06-09）
-- [ ] TASK-010b [client] 实现 LaunchView.ts：启动页 + 占位登录 + token 缓存 → spec: specs/launch-login.md **[ready]** （前置：TASK-017 ✅）
-- [ ] TASK-012 [client] 实现 HandCardView.ts + PlayZone.ts：手牌选择 + 出牌区 → spec: specs/game-table-ui.md **[ready]** （前置：TASK-011）
-- [ ] TASK-013 [client] 实现 PlayerSeat.ts + CodeCardSelector.ts：席位展示 + 暗号牌选择弹窗 → spec: specs/player-seat-ui.md **[ready]** （前置：TASK-011）
-- [ ] TASK-014 [client] 实现 SettlementView.ts：结算界面 + 身份揭晓动画 → spec: specs/settlement-view.md **[ready]** （前置：TASK-011）
-- [ ] TASK-015 [client] 实现 HallView.ts + MatchView.ts：主大厅 + 快速匹配/好友房 → spec: specs/hall-match-view.md **[ready]** （前置：TASK-010 ✅）
+- [x] TASK-011 [client] 实现 GameController.ts：客户端状态机（7状态）+ 消息驱动 **[done]**
+- [x] TASK-010b [client] 实现 LaunchView.ts：启动页 + 占位登录 + token 缓存 **[done]**
+- [x] TASK-012 [client] 实现 HandCardView.ts + PlayZone.ts：手牌选择 + 出牌区 **[done]**
+- [x] TASK-013 [client] 实现 PlayerSeat.ts + CodeCardSelector.ts：席位展示 + 暗号牌选择弹窗 **[done]**
+- [x] TASK-014 [client] 实现 SettlementView.ts：结算界面 + 身份揭晓动画 **[done]**
+- [x] TASK-015 [client] 实现 HallView.ts + MatchView.ts：主大厅 + 快速匹配/好友房 **[done]**
 
 ## P3 任务（服务端优化，P2 client 联调期间并行）
 
 - [x] TASK-018 [server] 实现 MatchMaker：段位分桶 + 容忍度扩展 + 好友房 roomCode → spec: specs/matchmaker.md **[done]**
-- [x] TASK-019 [server] 实现 SettleService：完整积分公式 + 分配规则 + 写库事务 → spec: specs/settle-service.md **[done]**
+- [x] TASK-019 [server] 实现 SettleService V1（已废弃，被 TASK-022 替换）→ spec: specs/settle-service.md **[deprecated]**
 - [x] TASK-021 [server] 实现 Logger + 埋点：结构化日志 + 关键事件埋点 → spec: specs/logging-monitor.md **[done]**
-- [ ] TASK-020 [server] 实现 AIPlayer：补位/托管出牌策略 → spec: specs/ai-player.md **[ready]** （前置：TASK-018 ✅）
+- [x] TASK-020 [server] 实现 AIPlayer：补位/托管出牌策略 → spec: specs/ai-player.md **[done]** 241/241 tests
+
+## P3+ 任务（计划书 V1.1 数值体系，依赖 P1/P2 完成）
+
+- [ ] TASK-024 [server] 数值模拟校准：≥10万局 AI 对局，验证地主方胜率 45%–55% → spec: specs/simulation-calibration.md **[ready]** ⚠️ P1 里程碑 Gate，TASK-022 实现前完成
+- [ ] TASK-023 [server] CardRoom 加倍阶段：新增 doubling 状态 + 协议消息 → spec: specs/doubling-phase.md **[ready]** （前置：TASK-024 Gate 通过）
+- [ ] TASK-022 [server] SettleService V2：倍数计分体系重写（零和+场次底分+个人加倍）→ spec: specs/scoring-v2.md **[ready]** （前置：TASK-023 done）

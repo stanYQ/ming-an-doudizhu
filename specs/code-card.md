@@ -108,7 +108,7 @@ deck1 card = 1 × 54 + sel.suit × 13 + sel.rank
 
 ## 不在范围内
 
-- 一挑四的积分倍率（×2）计算（属结算逻辑）
+- 一挑四的积分倍率（×3）计算（属结算逻辑，见 specs/scoring-v2.md）
 - 身份公开的广播消息发送（属 CardRoom，响应 `containsCodeCard` 结果）
 - 地主选择暗号牌的 UI 交互流程
 

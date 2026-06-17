@@ -29,4 +29,7 @@
 - [x] TASK-018 [server] 实现 MatchMaker：段位分桶 + 容忍度扩展 + 好友房 roomCode | 完成: server-dev | 测试: ✓ 16/16 AC | 产物: server/src/services/MatchService.ts, server/src/cache/redisClient.ts, server/src/__tests__/MatchService.test.ts | 总测试: 230/230
 - [x] TASK-020 [server] 实现 AIPlayer：补位/托管出牌策略 | 完成: server-dev | 测试: ✓ 11/11 AC | 产物: server/src/logic/AIPlayer.ts, server/src/__tests__/AIPlayer.test.ts | 总测试: 241/241
 - [x] TASK-013 [client] 实现 PlayerSeat.ts + CodeCardSelector.ts：席位展示 + 暗号牌选择弹窗 | 完成: client-dev | 测试: ✓ 22/22 AC | 产物: client/assets/scripts/ui/PlayerSeat.ts, client/assets/scripts/ui/CodeCardSelector.ts
+- [x] TASK-014 [client] 实现 SettlementView.ts：结算界面 + 积分展示 + 倍率明细 | 完成: client-dev | 测试: ✓ 18/18 AC | 产物: client/assets/scripts/ui/SettlementView.ts
+- [x] TASK-010b [client] 实现 LaunchView.ts：启动页 + Stub 登录 + JWT 缓存 + 跳转大厅 | 完成: client-dev | 测试: ✓ 9/9 AC | 产物: client/assets/scripts/ui/LaunchView.ts
+- [x] TASK-015 [client] 实现 HallView.ts + MatchView.ts：主大厅 + 快速匹配/好友房 | 完成: client-dev | 测试: ✓ 16/16 AC | 产物: client/assets/scripts/ui/HallView.ts, client/assets/scripts/ui/MatchView.ts
 - [x] TASK-012 [client] 实现 HandCardView.ts + PlayZone.ts：手牌选择 + 出牌区 | 完成: client-dev | 测试: ✓ 23/23 AC | 产物: client/assets/scripts/ui/HandCardView.ts, client/assets/scripts/ui/PlayZone.ts | 注: 测试文件修正 AC-11 card 编码错误（3♥=13，非1）
