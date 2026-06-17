@@ -6,6 +6,12 @@
     "test": "jest --coverage",
     "build": "tsc"
   },
+  "dependencies": {
+    "@colyseus/schema": "^2.0.0",
+    "colyseus": "^0.15.0",
+    "ioredis": "^5.0.0",
+    "mysql2": "^3.0.0"
+  },
   "devDependencies": {
     "@types/jest": "^29.5.0",
     "@types/node": "^20.0.0",
