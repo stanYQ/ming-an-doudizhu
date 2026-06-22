@@ -11,6 +11,7 @@ export function getPool(): Pool {
       user:             process.env.DB_USER     ?? "root",
       password:         process.env.DB_PASSWORD ?? "",
       database:         process.env.DB_NAME     ?? "game_db",
+      charset:          "utf8mb4", // 防止 mysql2 使用 cesu8 编解码器（BUG-001）
       waitForConnections: true,
       connectionLimit:  10,
     });

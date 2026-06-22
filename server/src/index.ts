@@ -4,7 +4,7 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { CardRoom } from "./rooms/CardRoom";
 import { handleLogin, handleMe } from "./routes/authRoutes";
 
-const PORT = Number(process.env.PORT ?? 3000);
+const PORT = Number(process.env.PORT ?? 2567);
 
 const httpServer = http.createServer(async (req, res) => {
   const url    = req.url?.split("?")[0] ?? "";
