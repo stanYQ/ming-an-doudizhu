@@ -25,7 +25,7 @@ export class LaunchSceneManager extends Component {
         const view = new LaunchView();
 
         // ── 注入 UI 引用 ───────────────────────────────────────────────────
-        view._errorLabel  = { string: this.errorLabel.string, node: this.errorLabel.node };
+        view._errorLabel  = this.errorLabel;   // Label 本身有 .string 和 .node
         view._retryBtn    = { node: this.retryBtnNode };
 
         // ── 注入依赖 ───────────────────────────────────────────────────────
