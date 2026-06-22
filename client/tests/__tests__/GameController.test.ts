@@ -41,11 +41,20 @@ function makeUIMocks() {
             { showIdentity: jest.fn() },
         ],
         codeCardSelector: { show: jest.fn() },
-        settlementView: { show: jest.fn(), showResult: jest.fn() },
+        settlementView:   { show: jest.fn(), showResult: jest.fn() },
+        doublingView: {
+            _mySeatIndex: -1,
+            _onSetDouble: jest.fn(),
+            show:               jest.fn(),
+            onLandlordDoubled:  jest.fn(),
+            onResult:           jest.fn(),
+            hide:               jest.fn(),
+        },
         netManager: {
-            playCards: jest.fn(),
-            pass: jest.fn(),
+            playCards:    jest.fn(),
+            pass:         jest.fn(),
             selectCodeCard: jest.fn(),
+            setDouble:    jest.fn(),
         },
     };
 }
@@ -58,6 +67,7 @@ function makeController() {
     ctrl.playerSeats       = ui.playerSeats;
     ctrl.codeCardSelector  = ui.codeCardSelector;
     ctrl.settlementView    = ui.settlementView;
+    ctrl.doublingView      = ui.doublingView;
     ctrl.netManager        = ui.netManager;
     ctrl.onLoad();
     return { ctrl, ui };
@@ -122,6 +132,66 @@ test('AC-5: STATE playing → PLAYING + playZone 可交互', () => {
     emit('STATE', { phase: 'playing' });
     expect(ctrl.getState()).toBe('PLAYING');
     expect(ui.playZone.setInteractable).toHaveBeenCalledWith(true);
+});
+
+// ===== TASK-027 AC-1: DOUBLING 枚举存在 =====
+test('TASK-027 AC-1: ClientGameState 包含 DOUBLING', () => {
+    const { ctrl } = makeController();
+    // state 不会直接是 DOUBLING 除非收到 DOUBLING_START 消息
+    emit('DOUBLING_START', { timeout: 30, landlordSeatIndex: 1 });
+    expect(ctrl.getState()).toBe('DOUBLING');
+});
+
+// ===== TASK-027 AC-2: DOUBLING_START → state=DOUBLING + doublingView.show() =====
+test('TASK-027 AC-2: DOUBLING_START → DOUBLING + doublingView.show(msg)', () => {
+    const { ctrl, ui } = makeController();
+    const msg = { timeout: 30, landlordSeatIndex: 2 };
+    emit('DOUBLING_START', msg);
+    expect(ctrl.getState()).toBe('DOUBLING');
+    expect(ui.doublingView.show).toHaveBeenCalledWith(msg);
+});
+
+test('TASK-027 AC-2b: DOUBLING_START 注入 _onSetDouble → 调用 netManager.setDouble', () => {
+    const { ctrl, ui } = makeController();
+    ctrl.setConnected(0, 'me');
+    emit('DOUBLING_START', { timeout: 30, landlordSeatIndex: 0 });
+    // _onSetDouble 被注入，调用它应触发 netManager.setDouble
+    ui.doublingView._onSetDouble(2);
+    expect(ui.netManager.setDouble).toHaveBeenCalledWith(2);
+});
+
+// ===== TASK-027 AC-3: LANDLORD_DOUBLED → doublingView.onLandlordDoubled =====
+test('TASK-027 AC-3: LANDLORD_DOUBLED → doublingView.onLandlordDoubled(msg), 不切换状态', () => {
+    const { ctrl, ui } = makeController();
+    emit('DOUBLING_START', { timeout: 30, landlordSeatIndex: 1 });
+    const msg = { value: 2 };
+    emit('LANDLORD_DOUBLED', msg);
+    expect(ui.doublingView.onLandlordDoubled).toHaveBeenCalledWith(msg);
+    expect(ctrl.getState()).toBe('DOUBLING');  // 状态不变
+});
+
+// ===== TASK-027 AC-4: DOUBLING_RESULT → doublingView.onResult =====
+test('TASK-027 AC-4: DOUBLING_RESULT → doublingView.onResult(msg)', () => {
+    const { ctrl, ui } = makeController();
+    emit('DOUBLING_START', { timeout: 30, landlordSeatIndex: 1 });
+    const msg = { results: [{ seatIndex: 0, doubled: false }] };
+    emit('DOUBLING_RESULT', msg);
+    expect(ui.doublingView.onResult).toHaveBeenCalledWith(msg);
+});
+
+// ===== TASK-027 AC-5: STATE playing（从 DOUBLING）→ doublingView.hide() =====
+test('TASK-027 AC-5: STATE playing → doublingView.hide() 被调用', () => {
+    const { ui } = makeController();
+    emit('DOUBLING_START', { timeout: 30, landlordSeatIndex: 1 });
+    emit('STATE', { phase: 'playing' });
+    expect(ui.doublingView.hide).toHaveBeenCalled();
+});
+
+// ===== TASK-027: setConnected 后 doublingView._mySeatIndex 同步 =====
+test('TASK-027: setConnected → doublingView._mySeatIndex 更新', () => {
+    const { ctrl, ui } = makeController();
+    ctrl.setConnected(3, 'session-x');
+    expect(ui.doublingView._mySeatIndex).toBe(3);
 });
 
 // ===== AC-6: phase=settlement → SETTLEMENT + 出牌区禁用 + 结算界面 =====
@@ -269,5 +339,27 @@ test('AC-20: 非法暗号牌点数 → 不调用 selectCodeCard', () => {
 test('onDestroy: 注销全部 oops.message 监听', () => {
     const { ctrl } = makeController();
     ctrl.onDestroy();
-    expect(mockOff).toHaveBeenCalledTimes(7); // STATE/HAND/TURN/PLAY/REVEAL/OVER/ERROR
+    expect(mockOff).toHaveBeenCalledTimes(13); // +REMATCH_UPDATE/REMATCH_START/REMATCH_REDIRECT
+});
+
+// ===== TASK-031c: REMATCH 消息路由 =====
+test('TASK-031c: REMATCH_UPDATE → settlementView.onRematchUpdate', () => {
+    const { ctrl, ui } = makeController();
+    ui.settlementView.onRematchUpdate = jest.fn();
+    emit('REMATCH_UPDATE', { agreedCount: 2, total: 5 });
+    expect(ui.settlementView.onRematchUpdate).toHaveBeenCalledWith({ agreedCount: 2, total: 5 });
+});
+
+test('TASK-031c: REMATCH_START → settlementView.onRematchStart', () => {
+    const { ctrl, ui } = makeController();
+    ui.settlementView.onRematchStart = jest.fn();
+    emit('REMATCH_START', {});
+    expect(ui.settlementView.onRematchStart).toHaveBeenCalledTimes(1);
+});
+
+test('TASK-031c: REMATCH_REDIRECT → settlementView.onRematchRedirect', () => {
+    const { ctrl, ui } = makeController();
+    ui.settlementView.onRematchRedirect = jest.fn();
+    emit('REMATCH_REDIRECT', { action: 'requeue' });
+    expect(ui.settlementView.onRematchRedirect).toHaveBeenCalledWith({ action: 'requeue' });
 });

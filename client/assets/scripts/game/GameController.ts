@@ -1,3 +1,9 @@
+/**
+ * @file GameController.ts
+ * @description 游戏桌核心控制器：响应服务端状态推送，驱动 UI 组件更新，转发本地操作到 NetManager。
+ * @module client/game
+ */
+
 import { _decorator, Component } from 'cc';
 import { message } from 'db://oops-framework/core/common/event/MessageManager';
 import { parse } from '../shared/PatternHelper';
@@ -11,6 +17,7 @@ export enum ClientGameState {
     IN_ROOM_WAIT    = 'IN_ROOM_WAIT',
     DEALING         = 'DEALING',
     LANDLORD_SELECT = 'LANDLORD_SELECT',
+    DOUBLING        = 'DOUBLING',
     PLAYING         = 'PLAYING',
     SETTLEMENT      = 'SETTLEMENT',
 }
@@ -25,63 +32,88 @@ export class GameController extends Component {
     private mySeatIndex: number = -1;
     private mySessionId: string = '';
 
-    // UI 组件引用（由场景注入）
+    // UI 组件引用（由场景装配脚本注入，不在编辑器里拖拽）
     handCardView:     any = null;
     playZone:         any = null;
     playerSeats:      any[] = [];
     codeCardSelector: any = null;
     settlementView:   any = null;
+    doublingView:     any = null;
     netManager:       any = null;
 
     onLoad() {
-        message.on('STATE',  this.onStateChange, this);
-        message.on('HAND',   this.onHand,        this);
-        message.on('TURN',   this.onTurn,         this);
-        message.on('PLAY',   this.onPlay,         this);
-        message.on('REVEAL', this.onReveal,       this);
-        message.on('OVER',   this.onOver,         this);
-        message.on('ERROR',  this.onError,        this);
+        message.on('STATE',            this.onStateChange,      this);
+        message.on('HAND',             this.onHand,             this);
+        message.on('TURN',             this.onTurn,             this);
+        message.on('PLAY',             this.onPlay,             this);
+        message.on('REVEAL',           this.onReveal,           this);
+        message.on('OVER',             this.onOver,             this);
+        message.on('ERROR',            this.onError,            this);
+        message.on('DOUBLING_START',   this.onDoublingStart,    this);
+        message.on('LANDLORD_DOUBLED', this.onLandlordDoubled,  this);
+        message.on('DOUBLING_RESULT',  this.onDoublingResult,   this);
+        message.on('REMATCH_UPDATE',   this.onRematchUpdate,    this);
+        message.on('REMATCH_START',    this.onRematchStart,     this);
+        message.on('REMATCH_REDIRECT', this.onRematchRedirect,  this);
     }
 
     onDestroy() {
-        message.off('STATE',  this.onStateChange, this);
-        message.off('HAND',   this.onHand,        this);
-        message.off('TURN',   this.onTurn,         this);
-        message.off('PLAY',   this.onPlay,         this);
-        message.off('REVEAL', this.onReveal,       this);
-        message.off('OVER',   this.onOver,         this);
-        message.off('ERROR',  this.onError,        this);
+        message.off('STATE',            this.onStateChange,      this);
+        message.off('HAND',             this.onHand,             this);
+        message.off('TURN',             this.onTurn,             this);
+        message.off('PLAY',             this.onPlay,             this);
+        message.off('REVEAL',           this.onReveal,           this);
+        message.off('OVER',             this.onOver,             this);
+        message.off('ERROR',            this.onError,            this);
+        message.off('DOUBLING_START',   this.onDoublingStart,    this);
+        message.off('LANDLORD_DOUBLED', this.onLandlordDoubled,  this);
+        message.off('DOUBLING_RESULT',  this.onDoublingResult,   this);
+        message.off('REMATCH_UPDATE',   this.onRematchUpdate,    this);
+        message.off('REMATCH_START',    this.onRematchStart,     this);
+        message.off('REMATCH_REDIRECT', this.onRematchRedirect,  this);
     }
 
-    /** joinRoom 完成后由外部调用 */
+    /**
+     * joinRoom 成功后由场景装配脚本调用，记录本局本人席位信息。
+     * @param mySeatIndex 本人在本局的座位编号（0-4）
+     * @param mySessionId Colyseus 分配的会话 ID，用于匹配 identity_reveal 消息
+     */
     setConnected(mySeatIndex: number, mySessionId: string) {
         this.mySeatIndex  = mySeatIndex;
         this.mySessionId  = mySessionId;
         this.state        = ClientGameState.IN_ROOM_WAIT;
+        if (this.doublingView) this.doublingView._mySeatIndex = mySeatIndex;
     }
 
+    /** 返回当前客户端状态机阶段，供测试和场景脚本查询。 */
     getState(): ClientGameState {
         return this.state;
     }
 
     // ─── 服务端 STATE 事件 ───────────────────────────────────────────────────
+    // 服务端是唯一的状态来源，客户端不自行推断阶段转换
 
     private onStateChange(_event: string, state: any) {
         switch (state.phase) {
+            // 收到 dealing → 进入发牌阶段，触发发牌动画
             case 'dealing':
                 this.state = ClientGameState.DEALING;
                 this.handCardView?.showDealAnimation?.();
                 break;
+            // 收到 landlord_select → 若本人是地主则弹出暗号牌选择器
             case 'landlord_select':
                 this.state = ClientGameState.LANDLORD_SELECT;
                 if (state.landlordSessionId === this.mySessionId) {
                     this.codeCardSelector?.show();
                 }
                 break;
+            // 收到 playing → 进入出牌阶段，激活出牌区交互；若仍在加倍面板则关闭
             case 'playing':
                 this.state = ClientGameState.PLAYING;
+                this.doublingView?.hide();
                 this.playZone?.setInteractable(true);
                 break;
+            // 收到 settlement → 禁用交互，展示结算界面
             case 'settlement':
                 this.state = ClientGameState.SETTLEMENT;
                 this.playZone?.setInteractable(false);
@@ -120,12 +152,51 @@ export class GameController extends Component {
         switch (msg.code) {
             case 1001: this.playZone?.showError('牌型不合法'); break;
             case 1002: this.playZone?.showError('压不过上家'); break;
-            case 1003: break; // 静默忽略
+            case 1003: break; // 静默忽略（不轮到本人出牌时的防御拦截）
         }
+    }
+
+    // ─── 加倍阶段消息 ────────────────────────────────────────────────────────
+
+    private onDoublingStart(_event: string, msg: any) {
+        // 收到 doubling_start → 切换状态并展示加倍面板
+        this.state = ClientGameState.DOUBLING;
+        if (this.doublingView) {
+            this.doublingView._onSetDouble = (v: 1 | 2) => this.netManager?.setDouble(v);
+            this.doublingView.show(msg);
+        }
+    }
+
+    private onLandlordDoubled(_event: string, msg: any) {
+        this.doublingView?.onLandlordDoubled(msg);
+    }
+
+    private onDoublingResult(_event: string, msg: any) {
+        this.doublingView?.onResult(msg);
+    }
+
+    // ─── 再来一局消息路由（TASK-031c）────────────────────────────────────────
+    // 服务端结算窗口期广播，GameController 统一转发给 settlementView
+
+    private onRematchUpdate(_event: string, msg: any) {
+        this.settlementView?.onRematchUpdate(msg);
+    }
+
+    private onRematchStart(_event: string, _msg: any) {
+        // 房间状态机重置回 waiting→dealing，随后收到 STATE phase=dealing 正常驱动
+        this.settlementView?.onRematchStart();
+    }
+
+    private onRematchRedirect(_event: string, msg: any) {
+        this.settlementView?.onRematchRedirect(msg);
     }
 
     // ─── 出牌交互 ────────────────────────────────────────────────────────────
 
+    /**
+     * 出牌按钮点击回调。
+     * 注意：只在本人回合有效；牌型合法性在此处预检，最终由服务端仲裁。
+     */
     onPlayButtonClick() {
         if (this.currentSeat !== this.mySeatIndex) return;
         const selected = this.handCardView?.getSelectedCards() ?? [];
@@ -137,6 +208,10 @@ export class GameController extends Component {
         this.netManager?.playCards(selected);
     }
 
+    /**
+     * 不要按钮点击回调。
+     * 注意：只在本人回合有效；服务端会校验是否可以 pass。
+     */
     onPassButtonClick() {
         if (this.currentSeat !== this.mySeatIndex) return;
         this.netManager?.pass();
@@ -144,6 +219,11 @@ export class GameController extends Component {
 
     // ─── 暗号牌选择（仅地主）────────────────────────────────────────────────
 
+    /**
+     * 地主确认暗号牌后由 CodeCardSelector.onConfirm 回调触发。
+     * @param suit 花色字符串（由 CodeCardSelector 转换）
+     * @param value rank 编码，0=3 … 7=10；非法值静默丢弃
+     */
     onCodeCardSelect(suit: string, value: number) {
         if (!VALID_CODE_CARD_VALUES.has(value)) return;
         this.netManager?.selectCodeCard(suit, value);

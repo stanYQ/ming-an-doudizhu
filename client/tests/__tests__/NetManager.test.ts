@@ -67,12 +67,20 @@ test('AC-3: joinRoom 失败时抛出错误', async () => {
 
 // ===== AC-4 ~ AC-9: 消息路由 =====
 const routingCases: [string, string][] = [
-    ['your_hand',       'HAND'],
-    ['identity_reveal', 'REVEAL'],
-    ['game_over',       'OVER'],
-    ['turn_change',     'TURN'],
-    ['play_broadcast',  'PLAY'],
-    ['error',           'ERROR'],
+    ['your_hand',        'HAND'],
+    ['identity_reveal',  'REVEAL'],
+    ['game_over',        'OVER'],
+    ['turn_change',      'TURN'],
+    ['play_broadcast',   'PLAY'],
+    ['error',            'ERROR'],
+    ['doubling_start',   'DOUBLING_START'],
+    ['landlord_doubled', 'LANDLORD_DOUBLED'],
+    ['doubling_result',  'DOUBLING_RESULT'],
+    ['waiting_update',   'WAITING_UPDATE'],
+    ['room_update',      'ROOM_UPDATE'],
+    ['rematch_update',   'REMATCH_UPDATE'],
+    ['rematch_start',    'REMATCH_START'],
+    ['rematch_redirect', 'REMATCH_REDIRECT'],
 ];
 
 test.each(routingCases)('AC: 收到 "%s" → oops.message.dispatchEvent("%s")', async (serverMsg, event) => {
@@ -143,5 +151,46 @@ test('AC-16: room 为 null 时所有 send 方法静默忽略', () => {
     expect(() => manager.selectCodeCard('spade', 1)).not.toThrow();
     expect(() => manager.reconnectSync()).not.toThrow();
     expect(() => manager.requestHint()).not.toThrow();
+    expect(() => manager.setDouble(1)).not.toThrow();
+    expect(() => manager.forceStart()).not.toThrow();
+    expect(() => manager.requestRematch()).not.toThrow();
+    expect(mockSend).not.toHaveBeenCalled();
+});
+
+// ===== AC-6/7: setDouble =====
+test('AC-6: setDouble(1) 发送 set_double { value: 1 }', async () => {
+    await setupWithRoom();
+    manager.setDouble(1);
+    expect(mockSend).toHaveBeenCalledWith('set_double', { value: 1 });
+});
+
+test('AC-7: setDouble(2) 发送 set_double { value: 2 }', async () => {
+    await setupWithRoom();
+    manager.setDouble(2);
+    expect(mockSend).toHaveBeenCalledWith('set_double', { value: 2 });
+});
+
+test('TASK-029c: forceStart 发送 force_start', async () => {
+    await setupWithRoom();
+    manager.forceStart();
+    expect(mockSend).toHaveBeenCalledWith('force_start');
+});
+
+test('TASK-031c: requestRematch 发送 request_rematch', async () => {
+    await setupWithRoom();
+    manager.requestRematch();
+    expect(mockSend).toHaveBeenCalledWith('request_rematch');
+});
+
+test('TASK-031c: leaveRoom 调用 room.leave() 并清除引用', async () => {
+    const mockLeave = jest.fn().mockResolvedValue(undefined);
+    const roomWithLeave = { ...mockRoom, leave: mockLeave };
+    mockJoinOrCreate.mockResolvedValueOnce(roomWithLeave);
+    manager.init('ws://localhost:2567');
+    await manager.joinRoom('game', {});
+    await manager.leaveRoom();
+    expect(mockLeave).toHaveBeenCalledTimes(1);
+    // 离开后 send 方法静默忽略（room 已 null）
+    expect(() => manager.pass()).not.toThrow();
     expect(mockSend).not.toHaveBeenCalled();
 });
