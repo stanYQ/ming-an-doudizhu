@@ -55,11 +55,14 @@ async function setup5(colyseus: ColyseusTestServer): Promise<{
   const roomId = first.id;
   const handPromises: Promise<any>[] = [waitMsg(first, "your_hand")];
   const clients: any[] = [first];
+  // Register no-op for bottom_cards to suppress SDK warning (only landlord receives it)
+  first.onMessage("bottom_cards", () => {});
 
   for (let i = 1; i < 5; i++) {
     setAuth(colyseus, i + 1);
     const c = await colyseus.sdk.joinById(roomId, {});
     handPromises.push(waitMsg(c, "your_hand"));
+    c.onMessage("bottom_cards", () => {});
     clients.push(c);
   }
 
@@ -81,9 +84,21 @@ async function setupPlaying(colyseus: ColyseusTestServer): Promise<{
 }> {
   const { clients, hands, landlordSeat, serverRoom } = await setup5(colyseus);
 
-  const turnChanges = clients.map(c => waitMsg(c, "turn_change", 5000));
   // suit=0 value=0 → rank 0, suit 0 is always a valid code card selection
+  const doublingStarts = clients.map(c => waitMsg(c, "doubling_start", 5000));
   clients[landlordSeat].send("select_code_card", { suit: 0, value: 0 });
+  await Promise.all(doublingStarts);
+
+  // Complete doubling phase so we reach 'playing'
+  const landlordDoubles = clients.map(c => waitMsg(c, "landlord_doubled", 5000));
+  const doublingResults = clients.map(c => waitMsg(c, "doubling_result", 5000));
+  const turnChanges     = clients.map(c => waitMsg(c, "turn_change", 5000));
+  clients[landlordSeat].send("set_double", { value: 1 });
+  await Promise.all(landlordDoubles);
+  for (let i = 0; i < 5; i++) {
+    if (i !== landlordSeat) clients[i].send("set_double", { value: 1 });
+  }
+  await Promise.all(doublingResults);
   await Promise.all(turnChanges);
 
   await new Promise(r => setTimeout(r, 200));
@@ -95,10 +110,11 @@ async function setupPlaying(colyseus: ColyseusTestServer): Promise<{
 // ── server lifecycle ───────────────────────────────────────────────────────
 
 let colyseus: ColyseusTestServer;
+// httpServer 提升到模块级，确保 afterAll 可以显式 close()（BUG-003: worker force exit）
+let httpServer: ReturnType<typeof http.createServer>;
 
 beforeAll(async () => {
-  // Build HTTP server with auth routes so the test server handles /auth/*
-  const httpServer = http.createServer(async (req, res) => {
+  httpServer = http.createServer(async (req, res) => {
     const url    = req.url?.split("?")[0] ?? "";
     const method = req.method ?? "";
     if (method === "POST" && url === "/auth/login") { await handleLogin(req, res); return; }
@@ -117,6 +133,10 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await colyseus.shutdown();
+  // closeAllConnections() 强制销毁所有 TCP 连接，让 WebSocketTransport 的 pingInterval
+  // 能立即触发 server 'close' 事件并 clearInterval，避免 worker force exit（BUG-003）
+  httpServer.closeAllConnections();
+  await new Promise<void>(resolve => httpServer.close(() => resolve()));
 });
 
 afterEach(async () => {
@@ -313,12 +333,23 @@ describe("WS — select_code_card", () => {
     clients.forEach(c => c.leave());
   }, 15000);
 
-  it("合法暗号牌 → phase=playing，广播 turn_change", async () => {
+  it("合法暗号牌 → doubling 阶段，完成加倍后 phase=playing，广播 turn_change", async () => {
     const { clients, landlordSeat, serverRoom } = await setup5(colyseus);
-    const turns = clients.map(c => waitMsg(c, "turn_change", 5000));
 
+    const doublingStarts = clients.map(c => waitMsg(c, "doubling_start", 5000));
     clients[landlordSeat].send("select_code_card", { suit: 0, value: 0 });
+    await Promise.all(doublingStarts);
+    expect(serverRoom.state.phase).toBe("doubling");
 
+    const llDoubles  = clients.map(c => waitMsg(c, "landlord_doubled", 5000));
+    const dblResults = clients.map(c => waitMsg(c, "doubling_result", 5000));
+    const turns      = clients.map(c => waitMsg(c, "turn_change", 5000));
+    clients[landlordSeat].send("set_double", { value: 1 });
+    await Promise.all(llDoubles);
+    for (let i = 0; i < 5; i++) {
+      if (i !== landlordSeat) clients[i].send("set_double", { value: 1 });
+    }
+    await Promise.all(dblResults);
     const changes = await Promise.all(turns);
     changes.forEach(tc => {
       expect(typeof tc.seatIndex).toBe("number");
@@ -420,8 +451,19 @@ describe("WS — play phase happy path", () => {
 
     // 找一张明确的暗号牌编码：suit=0, value=0 → encode(0,0,0)=0
     // CodeCard 匹配手中持有对应暗号牌的玩家
-    const turns = clients.map(c => waitMsg(c, "turn_change", 5000));
+    const doublingStarts = clients.map(c => waitMsg(c, "doubling_start", 5000));
     clients[landlordSeat].send("select_code_card", { suit: 0, value: 0 });
+    await Promise.all(doublingStarts);
+
+    const identityLlDoubles  = clients.map(c => waitMsg(c, "landlord_doubled", 5000));
+    const identityDblResults = clients.map(c => waitMsg(c, "doubling_result", 5000));
+    const turns              = clients.map(c => waitMsg(c, "turn_change", 5000));
+    clients[landlordSeat].send("set_double", { value: 1 });
+    await Promise.all(identityLlDoubles);
+    for (let i = 0; i < 5; i++) {
+      if (i !== landlordSeat) clients[i].send("set_double", { value: 1 });
+    }
+    await Promise.all(identityDblResults);
     await Promise.all(turns);
 
     // 注册 identity_reveal 监听
@@ -431,7 +473,6 @@ describe("WS — play phase happy path", () => {
 
     // 当前玩家出手牌中的暗号牌对（如果刚好持有），否则只测回合推进
     // 为不依赖随机洗牌，此处仅验证消息结构格式
-    const currentSeat: number = serverRoom.state.currentTurnSeat;
     const partnerPlayer = [...serverRoom.state.players.values()].find(p => p.role === "partner");
 
     if (partnerPlayer) {

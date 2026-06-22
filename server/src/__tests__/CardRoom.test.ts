@@ -29,6 +29,13 @@ jest.mock("../logic/Deck", () => ({
   },
 }));
 
+jest.mock("../services/SettleService", () => ({
+  SettleService: {
+    calcDeltas: jest.fn(() => new Map<string, number>()),
+    settle:     jest.fn().mockResolvedValue(undefined),
+  },
+}));
+
 import { CardRoom } from "../rooms/CardRoom";
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -82,6 +89,12 @@ function msg(room: CardRoom, type: string, client: MockClient, data?: unknown) {
   fn(client, data);
 }
 
+/** Submit set_double for all 5 players (landlord first, per AC-5). */
+function completeDoubling(room: CardRoom, clients: MockClient[], value: 1 | 2 = 1) {
+  msg(room, "set_double", clients[0], { value }); // landlord first
+  for (let i = 1; i < 5; i++) msg(room, "set_double", clients[i], { value });
+}
+
 /** Advance room to 'playing' phase with default code-card selection.
  *  Landlord = p0, partner = p2 (holds card 54 = encode(1,0,0)). */
 function setupPlaying(prefix = "p") {
@@ -90,6 +103,7 @@ function setupPlaying(prefix = "p") {
   // landlord (p0) selects code card { suit:0, value:0 }
   // pair = [encode(0,0,0)=0, encode(1,0,0)=54]; card 54 is in seat-2 hand [42-62]
   msg(room, "select_code_card", clients[0], { suit: 0, value: 0 });
+  completeDoubling(room, clients);
   return { room, clients, broadcasts, timerFns, timers };
 }
 
@@ -126,10 +140,12 @@ describe("CardRoom — lifecycle", () => {
     expect(room.state.landlordSeat).toBe(0);
   });
 
-  it("AC-3: phase becomes 'playing'; currentTurnSeat = landlordSeat after code-card select", () => {
+  it("AC-3: code-card select → doubling; all set_double → playing at landlordSeat", () => {
     const { room } = buildRoom();
     const clients = addClients(room, 5);
     msg(room, "select_code_card", clients[0], { suit: 0, value: 0 });
+    expect(room.state.phase).toBe("doubling");
+    completeDoubling(room, clients);
     expect(room.state.phase).toBe("playing");
     expect(room.state.currentTurnSeat).toBe(0);
   });
@@ -412,5 +428,154 @@ describe("CardRoom — schema safety", () => {
     expect(handBroadcast).toBeUndefined();
     // Each individual client DOES get your_hand
     // (already verified in AC-2 — this test just checks no broadcast leak)
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TASK-023: Doubling phase (AC-1 ~ AC-13)
+// ══════════════════════════════════════════════════════════════════════════════
+
+function buildDoubling() {
+  const { room, broadcasts, timerFns, timers } = buildRoom();
+  const clients = addClients(room, 5);
+  msg(room, "select_code_card", clients[0], { suit: 0, value: 0 });
+  // Now in 'doubling' phase
+  return { room, clients, broadcasts, timerFns, timers };
+}
+
+describe("CardRoom — doubling phase (TASK-023)", () => {
+  it("AC-1: landlord_select → doubling after code-card selection", () => {
+    const { room } = buildDoubling();
+    expect(room.state.phase).toBe("doubling");
+    expect(room.state.doublingPhase).toBe(true);
+  });
+
+  it("AC-2: all 5 set_double → phase = playing immediately", () => {
+    const { room, clients } = buildDoubling();
+    completeDoubling(room, clients);
+    expect(room.state.phase).toBe("playing");
+    expect(room.state.doublingPhase).toBe(false);
+  });
+
+  it("AC-3 (spec): timeout → unsubmitted players get di=1 → playing", () => {
+    const { room, clients, timerFns } = buildDoubling();
+    // Only landlord submits; others don't
+    msg(room, "set_double", clients[0], { value: 1 });
+    // Fire the doubling timer (first timer created by startDoubling)
+    const doublingTimerFn = timerFns.find((_, i) => i === 0);
+    doublingTimerFn!();
+    expect(room.state.phase).toBe("playing");
+  });
+
+  it("AC-4: doubling_start broadcast immediately on entering doubling", () => {
+    const { broadcasts } = buildDoubling();
+    const start = broadcasts.find(b => b.type === "doubling_start");
+    expect(start).toBeDefined();
+    expect((start!.data as any).timeout).toBe(30);
+    expect((start!.data as any).landlordSeatIndex).toBe(0);
+  });
+
+  it("AC-5: non-landlord set_double before landlord → queued, not yet committed", () => {
+    const { room, clients } = buildDoubling();
+    // p1 submits before landlord
+    msg(room, "set_double", clients[1], { value: 2 });
+    // Doubling should NOT be complete (landlord hasn't submitted)
+    expect(room.state.phase).toBe("doubling");
+    expect((room as any).doublingSubmits.size).toBe(0);
+    expect((room as any).pendingDoubles.size).toBe(1);
+  });
+
+  it("AC-6: landlord_doubled broadcast after landlord submits", () => {
+    const { room, clients, broadcasts } = buildDoubling();
+    msg(room, "set_double", clients[0], { value: 2 }); // landlord dL=2
+    const lmsg = broadcasts.find(b => b.type === "landlord_doubled");
+    expect(lmsg).toBeDefined();
+    expect((lmsg!.data as any).value).toBe(2);
+    expect(room.state.landlordDoubleValue).toBe(2);
+  });
+
+  it("AC-6: pending submissions are flushed when landlord submits", () => {
+    const { room, clients } = buildDoubling();
+    // p1, p2 submit early
+    msg(room, "set_double", clients[1], { value: 1 });
+    msg(room, "set_double", clients[2], { value: 2 });
+    expect((room as any).pendingDoubles.size).toBe(2);
+    // landlord submits → flushes pending
+    msg(room, "set_double", clients[0], { value: 1 });
+    expect((room as any).pendingDoubles.size).toBe(0);
+    expect((room as any).doublingSubmits.size).toBe(3); // landlord + p1 + p2
+  });
+
+  it("AC-7: non-landlord submissions after landlord go directly to doublingSubmits", () => {
+    const { room, clients } = buildDoubling();
+    msg(room, "set_double", clients[0], { value: 1 }); // landlord first
+    msg(room, "set_double", clients[3], { value: 2 }); // p3 after landlord
+    expect((room as any).doublingSubmits.has(clients[3].sessionId)).toBe(true);
+    expect((room as any).pendingDoubles.size).toBe(0);
+  });
+
+  it("AC-8/9: doubling_result broadcast with doubled:boolean only (no role field)", () => {
+    const { room, clients, broadcasts } = buildDoubling();
+    completeDoubling(room, clients, 2); // all d=2
+    const result = broadcasts.find(b => b.type === "doubling_result");
+    expect(result).toBeDefined();
+    const res = (result!.data as any).results as Array<{ seatIndex: number; doubled: boolean }>;
+    expect(res).toHaveLength(5);
+    for (const r of res) {
+      expect(r.doubled).toBe(true);
+      expect((r as any).role).toBeUndefined();   // AC-9: no role leaked
+      expect((r as any).identity).toBeUndefined();
+    }
+  });
+
+  it("AC-10: doublingData.landlordDouble and playerDoubles populated", () => {
+    const { room, clients } = buildDoubling();
+    msg(room, "set_double", clients[0], { value: 2 }); // landlord dL=2
+    for (let i = 1; i < 5; i++) msg(room, "set_double", clients[i], { value: 1 });
+    const data = (room as any).doublingData;
+    expect(data).not.toBeNull();
+    expect(data.landlordDouble).toBe(2);
+    expect(data.playerDoubles.size).toBe(5);
+  });
+
+  it("AC-11: doublingData.partnerDoubled reflects partner's choice", () => {
+    const { room, clients } = buildDoubling();
+    // partner = p2 (clients[2]). p2 doubles (value=2); others don't.
+    msg(room, "set_double", clients[0], { value: 1 });
+    for (let i = 1; i < 5; i++) {
+      msg(room, "set_double", clients[i], { value: i === 2 ? 2 : 1 });
+    }
+    const data = (room as any).doublingData;
+    expect(data.partnerDoubled).toBe(true);
+  });
+
+  it("AC-11: partnerDoubled=false when partner does not double", () => {
+    const { room, clients } = buildDoubling();
+    completeDoubling(room, clients, 1); // all d=1
+    expect((room as any).doublingData.partnerDoubled).toBe(false);
+  });
+
+  it("AC-12: reconnect during doubling → receives doubling_start replay", () => {
+    const { room, clients } = buildDoubling();
+    const c0 = clients[0];
+    c0.send.mockClear();
+    (room as any).handleReconnectSync(c0);
+    const replay = c0.send.mock.calls.find(([t]: [string]) => t === "doubling_start");
+    expect(replay).toBeDefined();
+  });
+
+  it("duplicate set_double → first value wins", () => {
+    const { room, clients } = buildDoubling();
+    msg(room, "set_double", clients[0], { value: 2 }); // landlord submits dL=2
+    msg(room, "set_double", clients[0], { value: 1 }); // duplicate → ignored
+    expect((room as any).doublingSubmits.get(clients[0].sessionId)).toBe(2);
+  });
+
+  it("all d=1: doubling_result shows doubled=false for all", () => {
+    const { room, clients, broadcasts } = buildDoubling();
+    completeDoubling(room, clients, 1);
+    const result = broadcasts.find(b => b.type === "doubling_result")!;
+    const res = (result.data as any).results as Array<{ doubled: boolean }>;
+    expect(res.every(r => r.doubled === false)).toBe(true);
   });
 });

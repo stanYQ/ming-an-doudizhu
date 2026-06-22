@@ -7,4 +7,5 @@ export class Player extends Schema {
   @type("string")  role: string       = ""; // "landlord" | "partner" | "civilian"
   @type("boolean") revealed: boolean  = false;
   @type("number")  seatIndex: number  = 0;
+  @type("boolean") isAI: boolean      = false; // true = AI 补位玩家，clients 中为 fakeClient
 }

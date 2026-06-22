@@ -1,3 +1,8 @@
+/**
+ * @file CardRoom.ts
+ * @description Colyseus 游戏房间：状态机 + 消息处理 + AI 补位 + 结算 + 再来一局
+ * @module CardRoom
+ */
 import { Room, Client } from "@colyseus/core";
 import type { IncomingMessage } from "http";
 import { ArraySchema } from "@colyseus/schema";
@@ -9,6 +14,9 @@ import { RuleEngine } from "../logic/RuleEngine";
 import { CodeCard, CodeCardSelection } from "../logic/CodeCard";
 import { Deck } from "../logic/Deck";
 import { compareValue } from "../../../shared/CardEncoding";
+import { PatternType } from "../../../shared/CardPattern";
+import { SettleService, GameSummaryV2, TableType } from "../services/SettleService";
+import { AIPlayer } from "../logic/AIPlayer";
 
 export class CardRoom extends Room<GameState> {
   maxClients = 5;
@@ -31,21 +39,72 @@ export class CardRoom extends Room<GameState> {
   private seatMap: string[] = []; // seatIndex → sessionId
   private turnTimer: { clear(): void } | null = null;
 
+  // Doubling phase state
+  private doublingTimer:            { clear(): void } | null = null;
+  private doublingSubmits           = new Map<string, 1|2>(); // confirmed submissions
+  private pendingDoubles            = new Map<string, 1|2>(); // queued before landlord submits
+  private landlordDoubleSubmitted   = false;
+  doublingData: {
+    landlordDouble: 1|2;
+    playerDoubles:  Map<string, 1|2>;
+    partnerDoubled: boolean;
+  } | null = null;
+
+  // Settlement tracking
+  private tableType: TableType      = "casual";
+  private gameStartTime             = 0;
+  private bombCount                 = 0;
+  private rocketSmallCount          = 0;
+  private rocketBigCount            = 0;
+  private civilianPlayed            = new Set<string>(); // spring detection
+  private landlordCampPlayed        = new Set<string>(); // anti-spring detection
+  private userIdMap                 = new Map<string, number>(); // sessionId → userId
+
+  // AI fill — TASK-029s / 030s
+  private aiFillEnabled   = false;               // 仅快速匹配房且显式开启时为 true
+  private isFriendRoom    = false;               // 好友房模式：room_update + force_start
+  private aiFillDelay     = 30;                  // AI 补位倒计时（秒），可由 roomOptions 覆盖
+  private aiFillRemaining = 0;                   // 剩余秒数，广播给客户端
+  private aiFillTimer:    { clear(): void } | null = null; // 主补位触发定时器
+  private aiFillTicker:   { clear(): void } | null = null; // 每秒更新 aiSeconds 的滚动定时器
+  // AI 玩家的 fake client 直接 push 进 this.clients——Colyseus clients 在单元测试中是普通数组，
+  // 生产环境同样支持 push；AI 不发真实 WebSocket 消息，send 为 no-op
+  private aiSessionIds    = new Set<string>();   // 标记哪些 sessionId 是 AI，绕过 turn timer
+  private realPlayerCount = 0;                   // 真实玩家数，rematch total / waitingUpdate 依据
+  private nicknameMap     = new Map<string, string>(); // sessionId → 昵称，供 room_update 使用
+
+  // Rematch — TASK-031s
+  private rematchWindow:  { clear(): void } | null = null; // 30s 窗口期定时器，到期才 disconnect
+  private rematchAgreed   = new Set<string>();   // 当局已同意再来一局的真实玩家
+  private rematchCount    = 0;                   // 连续再来一局次数，超 10 次强制返回大厅
+
   // ── lifecycle ──────────────────────────────────────────────────────────────
 
-  onCreate(_options: unknown): void {
+  onCreate(options?: { tableType?: TableType; isFriendRoom?: boolean; aiFillEnabled?: boolean; aiFillDelay?: number }): void {
     this.setState(new GameState());
+    this.tableType     = options?.tableType     ?? "casual";
+    this.isFriendRoom  = options?.isFriendRoom  ?? false;
+    this.aiFillEnabled = options?.aiFillEnabled ?? false;
+    // AI_FILL_DELAY env 覆盖默认值，方便本地 demo 设 0 即时补位
+    this.aiFillDelay   = options?.aiFillDelay   ?? Number(process.env.AI_FILL_DELAY ?? 30);
 
-    this.onMessage("ready",            (c: Client)                             => this.handleReady(c));
+    this.onMessage("ready",            (c: Client)                                => this.handleReady(c));
     this.onMessage("select_code_card", (c: Client, m: {suit:number;value:number}) => this.handleSelectCode(c, m));
-    this.onMessage("play_cards",       (c: Client, m: {cards:number[]})        => this.handlePlay(c, m));
-    this.onMessage("pass",             (c: Client)                             => this.handlePass(c));
-    this.onMessage("reconnect_sync",   (c: Client)                             => this.handleReconnectSync(c));
+    this.onMessage("set_double",       (c: Client, m: {value: 1|2})              => this.handleSetDouble(c, m));
+    this.onMessage("play_cards",       (c: Client, m: {cards:number[]})           => this.handlePlay(c, m));
+    this.onMessage("pass",             (c: Client)                                => this.handlePass(c));
+    this.onMessage("reconnect_sync",   (c: Client)                                => this.handleReconnectSync(c));
+    this.onMessage("request_hint",     (c: Client)                                => this.handleRequestHint(c));
+    this.onMessage("force_start",      (c: Client)                                => this.handleForceStart(c));
+    this.onMessage("request_rematch",  (c: Client)                                => this.handleRequestRematch(c));
   }
 
-  onJoin(client: Client, _options: unknown): void {
+  onJoin(client: Client, options?: { nickname?: string }, auth?: { userId?: number }): void {
     const seatIndex = this.seatMap.length;
     this.seatMap.push(client.sessionId);
+    this.userIdMap.set(client.sessionId, auth?.userId ?? 0);
+    this.nicknameMap.set(client.sessionId, options?.nickname ?? `玩家${seatIndex + 1}`);
+    this.realPlayerCount++;
 
     const player = new Player();
     player.sessionId = client.sessionId;
@@ -53,10 +112,44 @@ export class CardRoom extends Room<GameState> {
     this.state.players.set(client.sessionId, player);
     this.timeoutCount.set(client.sessionId, 0);
 
-    if (this.clients.length === 5) this.startDealing();
+    // First joiner is owner (friend room)
+    if (seatIndex === 0) this.state.ownerSessionId = client.sessionId;
+
+    if (this.clients.length === 5) {
+      this.cancelAiFillTimer();
+      this.cancelAiFillTick();
+      this.startDealing();
+      return;
+    }
+
+    if (this.isFriendRoom) {
+      this.broadcastRoomUpdate();
+    } else if (this.aiFillEnabled) {
+      if (this.realPlayerCount === 1) {
+        this.aiFillRemaining = this.aiFillDelay;
+        this.startAiFillCountdown();
+      }
+      this.broadcastWaitingUpdate();
+    }
+  }
+
+  onDispose(): void {
+    if (this.doublingTimer) { this.doublingTimer.clear(); this.doublingTimer = null; }
+    if (this.turnTimer)     { this.turnTimer.clear();     this.turnTimer     = null; }
+    if (this.aiFillTimer)   { this.aiFillTimer.clear();   this.aiFillTimer   = null; }
+    if (this.aiFillTicker)  { this.aiFillTicker.clear();  this.aiFillTicker  = null; }
+    if (this.rematchWindow) { this.rematchWindow.clear(); this.rematchWindow  = null; }
   }
 
   async onLeave(client: Client, _consented: boolean): Promise<void> {
+    if (this.state.phase === "waiting") {
+      if (!this.aiSessionIds.has(client.sessionId)) {
+        this.realPlayerCount = Math.max(0, this.realPlayerCount - 1);
+      }
+      if (this.isFriendRoom) this.broadcastRoomUpdate();
+      else if (this.aiFillEnabled) this.broadcastWaitingUpdate();
+      return;
+    }
     try {
       // Hold the seat for 60 s; resolve = reconnected, reject = timed out
       await this.allowReconnection(client, 60);
@@ -99,6 +192,12 @@ export class CardRoom extends Room<GameState> {
     landlordClient?.send("bottom_cards", { cards: bottom });
 
     this.state.phase = "landlord_select";
+
+    // Auto-select code card when landlord is an AI player
+    if (this.aiSessionIds.has(this.landlordId)) {
+      const fakeClient = this.clients.find(c => c.sessionId === this.landlordId) as Client;
+      if (fakeClient) this.handleSelectCode(fakeClient, { suit: 0, value: 0 });
+    }
   }
 
   // ── message handlers ───────────────────────────────────────────────────────
@@ -129,9 +228,7 @@ export class CardRoom extends Room<GameState> {
       else                              player.role = "civilian";
     }
 
-    this.state.phase           = "playing";
-    this.state.currentTurnSeat = this.state.landlordSeat;
-    this.startTurnTimer();
+    this.startDoubling();
   }
 
   private handlePlay(client: Client, msg: { cards: number[] }): void {
@@ -160,6 +257,17 @@ export class CardRoom extends Room<GameState> {
 
     this.cancelTurnTimer();
     this.timeoutCount.set(client.sessionId, 0);
+
+    // Track bomb types for multiplier calculation
+    const pat = result.pattern;
+    if      (pat.type === PatternType.JOKER_BOMB_BIG)   this.rocketBigCount++;
+    else if (pat.type === PatternType.JOKER_BOMB_SMALL)  this.rocketSmallCount++;
+    else if (pat.type === PatternType.BOMB)              this.bombCount++;
+
+    // Track who played for spring/anti-spring detection
+    const sid = client.sessionId;
+    if (sid === this.landlordId || sid === this.partnerId) this.landlordCampPlayed.add(sid);
+    else                                                    this.civilianPlayed.add(sid);
 
     // Reveal partner if code card is played
     if (this.partnerId !== null) {
@@ -212,12 +320,129 @@ export class CardRoom extends Room<GameState> {
   private handleReconnectSync(client: Client): void {
     const hand = this.hands.get(client.sessionId) ?? [];
     client.send("your_hand", { cards: hand });
-    if (this.state.phase === "playing") {
+    if (this.state.phase === "doubling") {
+      // AC-12: replay doubling_start so reconnected client knows the phase
+      client.send("doubling_start", {
+        timeout:           30,
+        landlordSeatIndex: this.state.landlordSeat,
+      });
+    } else if (this.state.phase === "playing") {
       client.send("turn_change", {
         seatIndex: this.state.currentTurnSeat,
         deadline:  Date.now() + 30000,
       });
     }
+  }
+
+  // ── doubling phase ─────────────────────────────────────────────────────────
+
+  private startDoubling(): void {
+    this.gameStartTime        = Date.now();
+    this.state.phase          = "doubling";
+    this.state.doublingPhase  = true;
+    this.doublingSubmits.clear();
+    this.pendingDoubles.clear();
+    this.landlordDoubleSubmitted = false;
+
+    this.broadcast("doubling_start", {
+      timeout:           30,
+      landlordSeatIndex: this.state.landlordSeat,
+    });
+
+    this.doublingTimer = this.clock.setTimeout(() => {
+      this.handleDoublingTimeout();
+    }, 30000);
+
+    // Auto-submit doubling=1 for AI players so the phase doesn't stall
+    for (const aiSid of this.aiSessionIds) {
+      const fakeClient = this.clients.find(c => c.sessionId === aiSid) as Client;
+      if (fakeClient) this.handleSetDouble(fakeClient, { value: 1 });
+    }
+  }
+
+  private handleSetDouble(client: Client, msg: { value: 1 | 2 }): void {
+    if (this.state.phase !== "doubling") return;
+    const sid   = client.sessionId;
+    const value: 1 | 2 = msg.value === 2 ? 2 : 1;
+
+    if (sid === this.landlordId) {
+      if (this.landlordDoubleSubmitted) return; // first-wins on duplicates
+      this.landlordDoubleSubmitted = true;
+      this.doublingSubmits.set(sid, value);
+      this.state.landlordDoubleValue = value;
+
+      this.broadcast("landlord_doubled", { value });
+
+      // Flush queued non-landlord submissions
+      for (const [psid, pval] of this.pendingDoubles) {
+        this.doublingSubmits.set(psid, pval);
+      }
+      this.pendingDoubles.clear();
+      this.checkDoublingComplete();
+    } else {
+      // Ignore duplicates
+      if (this.doublingSubmits.has(sid) || this.pendingDoubles.has(sid)) return;
+      if (!this.landlordDoubleSubmitted) {
+        // AC-5: queue until landlord submits
+        this.pendingDoubles.set(sid, value);
+      } else {
+        this.doublingSubmits.set(sid, value);
+        this.checkDoublingComplete();
+      }
+    }
+  }
+
+  private checkDoublingComplete(): void {
+    if (this.doublingSubmits.size < 5) return;
+    this.cancelDoublingTimer();
+    this.finishDoubling();
+  }
+
+  private handleDoublingTimeout(): void {
+    // Missing players default to di=1 (AC-3, AC-13)
+    for (const sid of this.seatMap) {
+      if (!this.doublingSubmits.has(sid) && !this.pendingDoubles.has(sid)) {
+        this.doublingSubmits.set(sid, 1);
+      }
+    }
+    // Flush any pending (they submitted early before landlord)
+    for (const [sid, val] of this.pendingDoubles) {
+      if (!this.doublingSubmits.has(sid)) this.doublingSubmits.set(sid, val);
+    }
+    this.pendingDoubles.clear();
+    this.finishDoubling();
+  }
+
+  private cancelDoublingTimer(): void {
+    if (this.doublingTimer) {
+      this.doublingTimer.clear();
+      this.doublingTimer = null;
+    }
+  }
+
+  private finishDoubling(): void {
+    // AC-8/9: broadcast results without role info
+    const results = this.seatMap.map((sid, seatIndex) => ({
+      seatIndex,
+      doubled: this.doublingSubmits.get(sid) === 2,
+    }));
+    this.broadcast("doubling_result", { results });
+
+    // AC-10/11: store for SettleService V2 (TASK-022)
+    const landlordDouble = (this.doublingSubmits.get(this.landlordId) ?? 1) as 1 | 2;
+    const partnerDoubled = this.partnerId !== null &&
+      this.doublingSubmits.get(this.partnerId) === 2;
+
+    this.doublingData = {
+      landlordDouble,
+      playerDoubles: new Map(this.doublingSubmits),
+      partnerDoubled,
+    };
+
+    this.state.doublingPhase = false;
+    this.state.phase         = "playing";
+    this.state.currentTurnSeat = this.state.landlordSeat;
+    this.startTurnTimer();
   }
 
   // ── turn machine ───────────────────────────────────────────────────────────
@@ -227,12 +452,19 @@ export class CardRoom extends Room<GameState> {
   }
 
   private startTurnTimer(): void {
+    const currentSid = this.seatMap[this.state.currentTurnSeat];
+
     this.broadcast("turn_change", {
       seatIndex: this.state.currentTurnSeat,
       deadline:  Date.now() + 30000,
     });
 
-    const currentSid = this.seatMap[this.state.currentTurnSeat];
+    // AI players act immediately — no timer needed
+    if (this.aiSessionIds.has(currentSid)) {
+      this.executeAIAction(currentSid);
+      return;
+    }
+
     this.turnTimer = this.clock.setTimeout(() => {
       this.handleTimeout(currentSid);
     }, 30000);
@@ -294,14 +526,354 @@ export class CardRoom extends Room<GameState> {
 
   // ── settlement ─────────────────────────────────────────────────────────────
 
+  private buildGameSummary(firstOutId: string, winnerCamp: "landlord_camp" | "civilian_camp"): GameSummaryV2 {
+    const landlordWins  = winnerCamp === "landlord_camp";
+    const isSpring      = landlordWins && this.civilianPlayed.size === 0;
+    const isAntiSpring  = !landlordWins && this.landlordCampPlayed.size === 0;
+    const duration      = Math.floor((Date.now() - this.gameStartTime) / 1000);
+
+    const playerDoubles: Record<string, 1 | 2> = {};
+    for (const [psid, val] of (this.doublingData?.playerDoubles ?? new Map<string, 1|2>())) {
+      playerDoubles[psid] = val;
+    }
+
+    const players = this.seatMap.map((psid, idx) => ({
+      userId:    this.userIdMap.get(psid) ?? 0,
+      sessionId: psid,
+      rankPos:   idx,
+    }));
+
+    return {
+      roomId:           (this as any).roomId ?? "unknown",
+      tableType:        this.tableType,
+      winnerCamp:       landlordWins ? 1 : 0,
+      isLandlordAlone:  this.state.isAlone,
+      landlordId:       this.landlordId,
+      partnerId:        this.partnerId,
+      firstOutId,
+      landlordDouble:   this.doublingData?.landlordDouble ?? 1,
+      playerDoubles,
+      partnerDoubled:   this.doublingData?.partnerDoubled ?? false,
+      bombCount:        this.bombCount,
+      rocketSmallCount: this.rocketSmallCount,
+      rocketBigCount:   this.rocketBigCount,
+      hasEightBomb:     false,
+      isSpring,
+      isAntiSpring,
+      duration,
+      players,
+    };
+  }
+
   private finishGame(winnerId: string): void {
-    const winnerCamp = RuleEngine.determineWinner(
-      winnerId, this.landlordId, this.partnerId);
+    this.cancelTurnTimer();
+    const winnerCamp = RuleEngine.determineWinner(winnerId, this.landlordId, this.partnerId);
+    const summary    = this.buildGameSummary(winnerId, winnerCamp);
+
+    // Compute scores synchronously (pure function, no DB)
+    const deltas = SettleService.calcDeltas(summary);
+    const scores: Record<string, number> = {};
+    for (const [psid, d] of deltas) scores[psid] = d;
 
     this.state.phase = "settlement";
-    this.broadcast("game_over", { winnerCamp, scores: {} });
+    this.broadcast("game_over", { winnerCamp, scores });
 
-    // P3: persist to DB before disconnect
-    this.disconnect();
+    // Async DB persist — failure does not block game_over delivery
+    SettleService.settle(summary).catch(e =>
+      console.error("[CardRoom] settle failed:", (e as Error).message)
+    );
+
+    this.startRematchWindow();
+  }
+
+  // ── hint ───────────────────────────────────────────────────────────────────
+
+  /**
+   * request_hint: 当前出牌玩家请求 AI 提示。返回 hint { cards }。
+   * 仅在 playing 阶段且轮到该玩家时有效。
+   */
+  private handleRequestHint(client: Client): void {
+    if (this.state.phase !== "playing") return;
+    const player = this.state.players.get(client.sessionId);
+    if (!player || player.seatIndex !== this.state.currentTurnSeat) return;
+
+    const hand = this.hands.get(client.sessionId)!;
+    const isNewRound = this.state.lastPlay.length === 0 ||
+                       this.state.lastPlayerId === client.sessionId;
+    const lastPattern = isNewRound
+      ? null
+      : CardPatternEngine.parse([...this.state.lastPlay] as number[]);
+
+    const sid    = client.sessionId;
+    const role   = (player.role || "civilian") as "landlord" | "partner" | "civilian";
+    const ctx    = {
+      role,
+      allyId:          sid === this.landlordId ? this.partnerId
+                     : sid === this.partnerId  ? this.landlordId : null,
+      isLandlordAlone: this.state.isAlone,
+      myHandCount:     hand.length,
+    };
+
+    const hint = AIPlayer.decide(hand, lastPattern, ctx);
+    client.send("hint", { cards: hint });
+  }
+
+  // ── AI fill (TASK-029s / 030s) ─────────────────────────────────────────────
+
+  /**
+   * Starts the AI fill countdown for quick match rooms (aiFillEnabled=true).
+   * Two timers: main fill (aiFillDelay s) + per-second ticker for waiting_update aiSeconds.
+   */
+  private startAiFillCountdown(): void {
+    this.aiFillTimer = this.clock.setTimeout(() => {
+      this.cancelAiFillTick();
+      if (this.seatMap.length < 5 && this.state.phase === "waiting") {
+        this.fillWithAI(5 - this.seatMap.length);
+        this.startDealing();
+      }
+    }, this.aiFillDelay * 1000);
+
+    this.scheduleAiFillTick();
+  }
+
+  /** 每秒递减 aiFillRemaining 并广播 waiting_update；用 setTimeout 链代替 setInterval 以兼容现有 clock mock。 */
+  private scheduleAiFillTick(): void {
+    this.aiFillTicker = this.clock.setTimeout(() => {
+      this.aiFillRemaining = Math.max(0, this.aiFillRemaining - 1);
+      if (this.state.phase === "waiting") {
+        this.broadcastWaitingUpdate();
+        if (this.aiFillRemaining > 0) this.scheduleAiFillTick();
+      }
+    }, 1000);
+  }
+
+  private cancelAiFillTimer(): void {
+    if (this.aiFillTimer) { this.aiFillTimer.clear(); this.aiFillTimer = null; }
+  }
+
+  private cancelAiFillTick(): void {
+    if (this.aiFillTicker) { this.aiFillTicker.clear(); this.aiFillTicker = null; }
+  }
+
+  /**
+   * Injects AI players to fill remaining seats.
+   * AC-4: sessionId = "ai_<8-char>", Player.isAI = true
+   * AC-5: userId = 0 (no DB write for AI)
+   */
+  private fillWithAI(count: number): void {
+    for (let i = 0; i < count; i++) {
+      const sid        = `ai_${Math.random().toString(36).slice(2, 10).padEnd(8, "0")}`;
+      const fakeClient = { sessionId: sid, send: (_t: string, _d: unknown) => {} };
+      (this.clients as any[]).push(fakeClient);
+
+      const seatIndex = this.seatMap.length;
+      this.seatMap.push(sid);
+      this.userIdMap.set(sid, 0);
+      this.nicknameMap.set(sid, `AI${i + 1}`);
+      this.aiSessionIds.add(sid);
+
+      const player     = new Player();
+      player.sessionId = sid;
+      player.seatIndex = seatIndex;
+      player.isAI      = true;
+      this.state.players.set(sid, player);
+      this.timeoutCount.set(sid, 0);
+    }
+  }
+
+  /**
+   * 广播快速匹配等待状态。满 5 人后不再调用（onJoin 中提前 return）。
+   */
+  private broadcastWaitingUpdate(): void {
+    this.broadcast("waiting_update", {
+      readyCount: this.realPlayerCount,
+      total:      5,
+      aiSeconds:  this.aiFillRemaining,
+    });
+  }
+
+  /**
+   * 广播好友房当前人员列表。仅包含真实玩家槽位，AI 不出现在列表中。
+   * ownerSeatIndex 由客户端用于判断是否显示「开始游戏」按钮。
+   */
+  private broadcastRoomUpdate(): void {
+    const playerSlots = [...this.seatMap]
+      .filter(sid => !this.aiSessionIds.has(sid))
+      .map(sid => ({
+        seatIndex: this.state.players.get(sid)!.seatIndex,
+        nickname:  this.nicknameMap.get(sid) ?? `玩家${this.state.players.get(sid)!.seatIndex + 1}`,
+        avatarUrl: "",
+        isReady:   false,
+      }));
+
+    const ownerPlayer = this.state.players.get(this.state.ownerSessionId);
+    this.broadcast("room_update", {
+      players:        playerSlots,
+      ownerSeatIndex: ownerPlayer?.seatIndex ?? 0,
+    });
+  }
+
+  /**
+   * Immediately executes an AI player's turn using AIPlayer V2 decide().
+   * Called from startTurnTimer when the current seat belongs to an AI session.
+   */
+  private executeAIAction(sessionId: string): void {
+    const hand       = this.hands.get(sessionId)!;
+    const player     = this.state.players.get(sessionId);
+    const isNewRound = this.state.lastPlay.length === 0 ||
+                       this.state.lastPlayerId === sessionId;
+    const lastPattern = isNewRound
+      ? null
+      : CardPatternEngine.parse([...this.state.lastPlay] as number[]);
+
+    const role = (player?.role ?? "civilian") as "landlord" | "partner" | "civilian";
+    const ctx  = {
+      role,
+      allyId:          sessionId === this.landlordId ? this.partnerId
+                     : sessionId === this.partnerId  ? this.landlordId : null,
+      isLandlordAlone: this.state.isAlone,
+      myHandCount:     hand.length,
+    };
+
+    const cards      = AIPlayer.decide(hand, lastPattern, ctx);
+    const fakeClient = this.clients.find(c => c.sessionId === sessionId) as Client;
+
+    if (cards.length > 0 && fakeClient) {
+      this.handlePlay(fakeClient, { cards });
+      return;
+    }
+
+    // Defensive: AIPlayer always returns cards on a free round; fallback plays lowest
+    if (isNewRound && hand.length > 0) {
+      const lowest = hand.reduce((m, c) => compareValue(c) < compareValue(m) ? c : m);
+      if (fakeClient) this.handlePlay(fakeClient, { cards: [lowest] });
+      return;
+    }
+
+    this.passCount++;
+    if (this.passCount >= 4) {
+      this.passCount = 0;
+      this.state.lastPlay.splice(0, this.state.lastPlay.length);
+      this.state.lastPlayerId = "";
+    }
+    this.advanceTurn();
+    this.startTurnTimer();
+  }
+
+  /**
+   * 好友房房主强制开局：AI 补满剩余席位后立即发牌。
+   * 非房主或非 waiting 阶段发送 → 静默忽略（GAME-RULES.md 好友房规则）。
+   * @param client 发送方客户端
+   */
+  private handleForceStart(client: Client): void {
+    if (this.state.phase !== "waiting") return;
+    // 只有房主可以强制开局（spec AC-8: 非房主静默忽略）
+    if (client.sessionId !== this.state.ownerSessionId) return;
+
+    if (this.realPlayerCount < 2) {
+      // spec AC-7: 独自一人无法开局，返回 error 2003
+      client.send("error", { code: 2003, msg: "至少需要2名真实玩家才能开局" });
+      return;
+    }
+
+    const needed = 5 - this.seatMap.length;
+    if (needed > 0) this.fillWithAI(needed);
+    this.startDealing();
+  }
+
+  // ── rematch (TASK-031s) ────────────────────────────────────────────────────
+
+  /**
+   * 结算后开启 30s 再来一局窗口期。窗口期内收到全员 request_rematch 则重开；
+   * 否则 30s 到期触发 disconnect（spec AC-1, AC-4）。
+   */
+  private startRematchWindow(): void {
+    this.rematchAgreed.clear();
+    this.rematchWindow = this.clock.setTimeout(() => {
+      this.disconnect();
+    }, 30000);
+  }
+
+  /**
+   * 处理玩家「再来一局」请求。
+   * - 好友房：记录同意，全员同意后重开（AC-2, AC-3）
+   * - 快速匹配：直接返回 rematch_redirect，不重置房间（AC-7）
+   * @param client 发送方客户端
+   */
+  private handleRequestRematch(client: Client): void {
+    if (this.state.phase !== "settlement") return;
+
+    if (!this.isFriendRoom) {
+      // Quick match: redirect client to re-queue; no room reset
+      client.send("rematch_redirect", { action: "requeue" });
+      return;
+    }
+
+    if (this.rematchAgreed.has(client.sessionId)) return;
+    this.rematchAgreed.add(client.sessionId);
+
+    const total = this.realPlayerCount;
+    this.broadcast("rematch_update", { agreedCount: this.rematchAgreed.size, total });
+
+    if (this.rematchAgreed.size >= total) this.doRematch();
+  }
+
+  /**
+   * 全员同意后执行再来一局：广播 rematch_start，重置状态机，重新发牌。
+   * 沿用原有 seatMap 和 clients（含 AI fake clients），无需重新注入 AI。
+   */
+  private doRematch(): void {
+    if (this.rematchWindow) { this.rematchWindow.clear(); this.rematchWindow = null; }
+    this.rematchCount++;
+
+    // spec: 最多连续 10 局，防止无限循环（GAME-RULES.md 6.3 局后流程）
+    if (this.rematchCount > 10) {
+      this.disconnect();
+      return;
+    }
+
+    this.broadcast("rematch_start", {});
+    this.resetForRematch();
+    this.startDealing();
+  }
+
+  /**
+   * 重置局内状态以供再来一局使用。
+   * 保留 seatMap / clients / aiSessionIds / ownerSessionId，只清除局内数据。
+   */
+  private resetForRematch(): void {
+    this.hands.clear();
+    this.timeoutCount.clear();
+    this.managed.clear();
+    this.landlordId              = "";
+    this.partnerId               = null;
+    this.codeCardPair            = [];
+    this.passCount               = 0;
+    this.doublingData            = null;
+    this.doublingSubmits.clear();
+    this.pendingDoubles.clear();
+    this.landlordDoubleSubmitted = false;
+    this.gameStartTime           = 0;
+    this.bombCount               = 0;
+    this.rocketSmallCount        = 0;
+    this.rocketBigCount          = 0;
+    this.civilianPlayed.clear();
+    this.landlordCampPlayed.clear();
+    this.rematchAgreed.clear();
+
+    this.state.phase               = "waiting";
+    this.state.currentTurnSeat     = -1;
+    this.state.lastPlayerId         = "";
+    this.state.lastPlay.splice(0, this.state.lastPlay.length);
+    this.state.landlordSeat        = -1;
+    this.state.isAlone             = false;
+    this.state.doublingPhase       = false;
+    this.state.landlordDoubleValue = 0;
+
+    for (const sid of this.seatMap) {
+      const player = this.state.players.get(sid);
+      if (player) { player.role = ""; player.revealed = false; player.handCount = 0; }
+      this.timeoutCount.set(sid, 0);
+    }
   }
 }

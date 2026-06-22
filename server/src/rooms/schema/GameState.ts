@@ -17,4 +17,11 @@ export class GameState extends Schema {
 
   @type("number")   landlordSeat: number = -1;
   @type("boolean")  isAlone: boolean     = false;
+
+  // Doubling phase
+  @type("boolean") doublingPhase:        boolean = false;
+  @type("number")  landlordDoubleValue:  number  = 0; // 0=未选 1=不加倍 2=加倍
+
+  // Friend room — 好友房房主（首位入房者），force_start 权限校验依据
+  @type("string")  ownerSessionId: string = "";
 }
