@@ -25,25 +25,33 @@ const PATTERN_LABEL: Record<string, string> = {
 };
 
 export class HandCardView {
-  // injected by Cocos node bindings (or test stubs)
+  // 由 Cocos 场景绑定注入（测试中传入 stub 对象）
   _playButton:   { interactable: boolean } = { interactable: false };
   _patternLabel: { string: string }        = { string: '请选择合法牌型' };
 
   private _cards:    number[] = [];
-  private _selected: Set<number> = new Set(); // indices into _cards
+  private _selected: Set<number> = new Set(); // sorted _cards 数组的下标集合
   private _interactable = true;
 
+  /**
+   * 接收服务端发来的手牌，按牌力升序排列后渲染。
+   * @param cards 0-107 编码的手牌数组
+   */
   render(cards: number[]): void {
     this._cards = [...cards].sort((a, b) => compareValue(a) - compareValue(b));
     this._selected.clear();
     this._updatePatternUI();
   }
 
+  /** 返回当前持有的完整手牌（已排序）。 */
   getCards(): number[] {
     return this._cards;
   }
 
-  /** @param index position in sorted _cards array */
+  /**
+   * 切换指定位置的选中状态，并实时更新牌型提示。
+   * @param index 排序后 _cards 数组的下标，非牌编码
+   */
   selectCard(index: number): void {
     if (!this._interactable) return;
     if (index < 0 || index >= this._cards.length) return;
@@ -55,19 +63,26 @@ export class HandCardView {
     this._updatePatternUI();
   }
 
+  /** 返回当前选中的牌（原始编码，按下标升序）。 */
   getSelectedCards(): number[] {
     return [...this._selected].sort((a, b) => a - b).map(i => this._cards[i]);
   }
 
+  /** 清空所有选中状态并重置牌型提示。 */
   clearSelection(): void {
     this._selected.clear();
     this._updatePatternUI();
   }
 
+  /**
+   * 控制手牌区是否响应点击（非本人回合时禁用）。
+   * @param enabled true = 可交互
+   */
   setInteractable(enabled: boolean): void {
     this._interactable = enabled;
   }
 
+  // 根据当前选牌实时更新出牌按钮可用状态和牌型文字提示
   private _updatePatternUI(): void {
     const sel = this.getSelectedCards();
     if (sel.length === 0) {

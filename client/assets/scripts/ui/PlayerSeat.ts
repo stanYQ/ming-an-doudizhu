@@ -15,14 +15,19 @@ export interface SeatData {
 export class PlayerSeat {
   seatIndex = 0;
 
-  _nicknameLabel:  { string: string }                       = { string: '' };
-  _handCountLabel: { string: string }                       = { string: '' };
-  _timerNode:      { active: boolean }                      = { active: false };
+  // 由 Cocos 场景绑定注入（测试中传入 stub 对象）
+  _nicknameLabel:  { string: string }                            = { string: '' };
+  _handCountLabel: { string: string }                            = { string: '' };
+  _timerNode:      { active: boolean }                           = { active: false };
   _identityBadge:  { string: string; node: { active: boolean } } = { string: '', node: { active: false } };
-  _finishedNode:   { active: boolean }                      = { active: false };
+  _finishedNode:   { active: boolean }                           = { active: false };
 
   private _identity = '';
 
+  /**
+   * 刷新席位显示数据（每次 turn_change 或 play_broadcast 后调用）。
+   * @param data 最新的席位快照
+   */
   update(data: SeatData): void {
     this._nicknameLabel.string  = data.nickname;
     this._handCountLabel.string = String(data.handCount);
@@ -30,6 +35,11 @@ export class PlayerSeat {
     this._finishedNode.active   = data.handCount === 0;
   }
 
+  /**
+   * 展示玩家身份标签（identity_reveal 消息触发）。
+   * 注意：全屏揭晓动画由 Cocos tween 执行，此处只更新节点状态。
+   * @param role 身份：'landlord' | 'partner' | 'civilian'
+   */
   showIdentity(role: 'landlord' | 'partner' | 'civilian'): void {
     this._identity = role;
     if (role === 'civilian') {
@@ -38,12 +48,13 @@ export class PlayerSeat {
       this._identityBadge.string      = role;
       this._identityBadge.node.active = true;
     }
-    // AC-6: 全屏身份揭晓动画由 Cocos tween 执行，纯逻辑层只记录状态
   }
 
+  /** 标记该席位玩家已出完所有手牌。 */
   showFinished(): void {
     this._finishedNode.active = true;
   }
 
+  /** 返回当前记录的身份（未揭晓前为空字符串）。 */
   getIdentity(): string { return this._identity; }
 }

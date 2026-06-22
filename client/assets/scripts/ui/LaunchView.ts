@@ -17,19 +17,29 @@ const CACHE_KEY_TOKEN = 'ddz_token';
 const CACHE_KEY_USER  = 'ddz_user';
 
 export class LaunchView {
+  // 由 Cocos 场景绑定注入（测试中传入 stub 对象）
   _errorLabel: { string: string; node: { active: boolean } } = { string: '', node: { active: false } };
   _retryBtn:   { node: { active: boolean } }                 = { node: { active: false } };
 
-  // Injectable dependencies (Cocos impls injected at runtime, mocks in tests)
+  /** 资源预加载函数，由场景装配脚本注入（CC 版加载分包；测试版 resolve immediately）。 */
   _loadAssets:      () => Promise<void>       = () => Promise.resolve();
+  /** 登录 fetch，由场景装配脚本注入（CC 版调真实接口；测试版 mock）。 */
   _fetchLogin:      (code: string) => Promise<{ ok: boolean; status: number; json(): Promise<any> }>
                     = () => Promise.reject(new Error('not injected'));
+  /** localStorage 封装，由场景装配脚本注入（CC 版用 sys.localStorage）。 */
   _storage:         { getItem(k: string): string | null; setItem(k: string, v: string): void; removeItem(k: string): void }
                     = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+  /** 跳转大厅，由场景装配脚本注入（director.loadScene('HallScene')）。 */
   _navigateToHall:  () => void = () => {};
+  /** 当前时间戳（毫秒），供测试注入 fake clock。 */
   _clock:           () => number = () => Date.now();
+  /** 资源加载超时阈值（毫秒），默认 10s。 */
   _loadTimeout:     number = 10000;
 
+  /**
+   * 启动流程入口：加载资源 → 检查 JWT 缓存 → 登录 → 跳转大厅。
+   * 超时或登录失败时显示错误提示和重试按钮。
+   */
   async onLoad(): Promise<void> {
     const loaded = await this._withTimeout(this._loadAssets(), this._loadTimeout);
     if (!loaded) {
@@ -63,7 +73,7 @@ export class LaunchView {
     if (!token) return false;
     const exp = this._parseExp(token);
     if (exp === null) return false;
-    // AC-8: exp 恰好等于当前秒也视为过期
+    // exp 恰好等于当前秒也视为过期，避免边界值导致的极短有效窗口
     const nowSec = Math.floor(this._clock() / 1000);
     if (exp <= nowSec) {
       this._storage.removeItem(CACHE_KEY_TOKEN);
@@ -88,7 +98,7 @@ export class LaunchView {
     this._retryBtn.node.active   = true;
   }
 
-  // Resolves true on success, false on timeout; cancels the timer on success
+  // Promise.race：加载成功时主动 clearTimeout 防止 open handle（Jest 测试泄漏）
   private async _withTimeout(p: Promise<void>, ms: number): Promise<boolean> {
     let timer: ReturnType<typeof setTimeout> | null = null;
     return Promise.race([
