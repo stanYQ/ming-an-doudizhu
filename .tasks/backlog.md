@@ -45,11 +45,30 @@
 
 ## P4.1 任务（AI 升级 + 数值校准，串行执行）
 
-- [ ] TASK-025 [server] 实现 CardDecomposer：手牌拆分引擎（枚举所有合法牌型）→ spec: specs/card-decomposer.md **[ready]**
-- [ ] TASK-026 [server] 实现 AIPlayer V2：Tier 1 启发式策略（替换保守 AI）→ spec: specs/smart-ai-player.md **[ready]** （前置：TASK-025）
-- [ ] TASK-024 [server] 数值模拟校准：5-AI 房间跑 ≥10万局，Gate 胜率 45%–55% → spec: specs/simulation-calibration.md **[ready]** （前置：TASK-026）⚠️ Gate 通过后解锁 TASK-023/022
+- [x] TASK-025 [server] 实现 CardDecomposer：手牌拆分引擎（枚举所有合法牌型）→ spec: specs/card-decomposer.md **[done]**
+- [x] TASK-026 [server] 实现 AIPlayer V2：Tier 1 启发式策略（替换保守 AI）→ spec: specs/smart-ai-player.md **[done]**
+- [x] TASK-024 [server] 数值模拟校准：5-AI 房间跑 ≥10万局，Gate 胜率 45%–55% → spec: specs/simulation-calibration.md **[done]**
 
-## P4.1+ 任务（数值体系，依赖 TASK-024 Gate 通过）
+## P4.1+ 任务（数值体系）
 
-- [ ] TASK-023 [server] CardRoom 加倍阶段：新增 doubling 状态 + 协议消息 → spec: specs/doubling-phase.md **[ready]** （前置：TASK-024 ✅）
-- [ ] TASK-022 [server] SettleService V2：零和倍数公式 + 场次底分 + 个人加倍 → spec: specs/scoring-v2.md **[ready]** （前置：TASK-023 done）
+- [x] TASK-023 [server] CardRoom 加倍阶段：新增 doubling 状态 + 协议消息 → spec: specs/doubling-phase.md **[done]**
+- [x] TASK-022 [server] SettleService V2：零和倍数公式 + 场次底分 + 个人加倍 → spec: specs/scoring-v2.md **[done]**
+
+## P4.2 任务（客户端 UI 补全）
+
+- [x] TASK-027 [client] 加倍阶段 UI：DoublingView + GameController DOUBLING 状态 + NetManager.setDouble → spec: specs/doubling-view.md **[done]**
+- [x] TASK-028 [client] SettlementView V2：倍率明细区 + 个人加倍展示 + V1 降级兼容 → spec: specs/settlement-view-v2.md **[done]**
+
+## P4.3 任务（Demo 功能，server/client 可并行）
+
+- [x] TASK-029s [server] 快速匹配 AI 补位：可配置等待超时 + AI 注入 + `waiting_update` 广播 → spec: specs/quick-match-ai-fill.md **[done]**
+- [x] TASK-029c [client] 快速匹配等待界面：倒计时 + AI 补位提示 + MatchView 扩展 → spec: specs/quick-match-ai-fill.md **[done]**
+- [x] TASK-030s [server] 好友房服务端：`room_update` 广播 + `force_start` + `ownerSessionId` → spec: specs/friend-room-flow.md **[done]**
+- [x] TASK-030c [client] 好友房客户端：等待室人员列表 + 开始按钮 + 平台分享 → spec: specs/friend-room-flow.md **[done]**
+- [x] TASK-031s [server] 再来一局服务端：rematch 窗口期 + 好友房重开 + 快速匹配重排队 → spec: specs/rematch.md **[done]**
+- [x] TASK-031c [client] 再来一局客户端：SettlementView「再来一局」按钮 + 状态处理 → spec: specs/rematch.md **[done]**
+
+## P4.4 任务（集成冒烟 + Demo 准备）
+
+- [x] TASK-032s [server] 集成冒烟准备：修 BUG-001/002/003/004 + 启动环境验证 → spec: specs/integration-smoke.md **[done: 356/356]**
+- [ ] TASK-032c [client] 全流程集成冒烟测试：Node.js 直连真实 server，跑完整游戏流程 → spec: specs/integration-smoke.md **[blocked: 等 TASK-032s]**

@@ -1,7 +1,8 @@
 # 明暗斗地主 — 协议参考手册 v1.0
 
-> 权威来源：`server/src/` 实现，266/266 集成测试通过。  
-> 适用范围：client-dev（对接指南）+ server-dev（协议规范）。
+> 权威来源：`server/src/` 实现，333/333 集成测试通过。  
+> 适用范围：client-dev（对接指南）+ server-dev（协议规范）。  
+> 最后更新：TASK-023（加倍阶段）+ TASK-022（SettleService V2）
 
 ---
 
@@ -19,6 +20,8 @@
 10. [断线重连](#10-断线重连)
 11. [HTTP 接口](#11-http-接口)
 12. [环境与启动](#12-环境与启动)
+13. [安全约束](#13-安全约束)
+14. [集成测试命令](#14-集成测试命令)
 
 ---
 
@@ -163,9 +166,19 @@ export interface CardPattern {
                                                          players[*].role = "" (未揭露)
 
 [地主] room.send("select_code_card", { suit, value })
-                                        ←────  Schema delta: phase → "playing"
+                                        ←────  Schema delta: phase → "doubling"
                                                          players[*].role 写入
                                                          isAlone = true/false
+                                        ←────  [广播] doubling_start { timeout, landlordSeatIndex }
+
+── 加倍阶段 ─────────────────────────────────────────────────────
+[地主] room.send("set_double", { value: 1|2 })     ← 地主先提交 dL
+                                        ←────  [广播] landlord_doubled { value: 1|2 }
+
+[其余4人各自] room.send("set_double", { value: 1|2 })  ← 秘密独立提交
+（全部提交或超时后）
+                                        ←────  [广播] doubling_result { results: [{seatIndex, doubled}] }
+                                        ←────  Schema delta: phase → "playing"
                                         ←────  [广播] turn_change { seatIndex, deadline }
 
 ── 出牌循环 ────────────────────────────────────────────────────
@@ -181,7 +194,7 @@ export interface CardPattern {
 
 ── 结算 ────────────────────────────────────────────────────────
 （某玩家出完手牌）
-                                        ←────  [广播] game_over { winnerCamp, scores }
+                                        ←────  [广播] game_over { winnerCamp, scores, multiplier, breakdown }
                                                 房间关闭，Schema 停止更新
 ```
 
@@ -249,6 +262,22 @@ room.send("pass");
 
 ---
 
+### `set_double`
+
+仅在 `doubling` 阶段有效。地主可立即提交；其余玩家须等地主提交后才能提交（服务端暂存提前到达的消息）。
+
+```typescript
+room.send("set_double", {
+  value: 1 | 2,  // 1 = 不加倍，2 = 加倍
+});
+```
+
+**约束**：
+- 超出 `doubling` 阶段发送 → 静默忽略
+- 重复提交 → 以最后一次为准
+
+---
+
 ### `reconnect_sync`
 
 断线重连后请求补发当前手牌和回合状态。
@@ -257,7 +286,7 @@ room.send("pass");
 room.send("reconnect_sync");
 ```
 
-服务端响应：私发 `your_hand`；若在 `playing` 阶段则私发 `turn_change`。
+服务端响应：私发 `your_hand`；若在 `playing` 阶段则私发 `turn_change`；若在 `doubling` 阶段则重播 `doubling_start`。
 
 ---
 
@@ -299,6 +328,53 @@ room.onMessage("error", (data: { code: number; msg: string }) => {
 
 ### 广播（所有玩家收到）
 
+#### `doubling_start`
+
+进入加倍阶段时广播。地主先选，其余玩家初始锁定。
+
+```typescript
+room.onMessage("doubling_start", (data: {
+  timeout:           number,  // 倒计时秒数（默认 30）
+  landlordSeatIndex: number,  // 地主座位，先提交
+}) => {
+  showDoublingUI(data);
+});
+```
+
+---
+
+#### `landlord_doubled`
+
+地主提交 `set_double` 后广播，其余玩家的加倍按钮此时解锁。
+
+```typescript
+room.onMessage("landlord_doubled", (data: {
+  value: 1 | 2,  // 地主的选择（公开）
+}) => {
+  showLandlordChoice(data.value);
+  enableDoublingButtons();
+});
+```
+
+---
+
+#### `doubling_result`
+
+全员提交完毕或超时后广播。仅公开布尔值，**不泄露身份**。
+
+```typescript
+room.onMessage("doubling_result", (data: {
+  results: Array<{
+    seatIndex: number,
+    doubled:   boolean,  // true = 已加倍，false = 未加倍；不含角色信息
+  }>,
+}) => {
+  showDoublingResult(data.results);  // 展示 1.5s 后隐藏，等待 phase → "playing"
+});
+```
+
+---
+
 #### `turn_change`
 
 ```typescript
@@ -326,12 +402,27 @@ room.onMessage("identity_reveal", (data: {
 
 ```typescript
 room.onMessage("game_over", (data: {
-  winnerCamp: 0 | 1,  // 0 = 平民阵营胜  1 = 地主阵营胜
-  scores:     {},     // P3 待填充，当前为空对象
+  winnerCamp: 0 | 1,           // 0 = 平民阵营胜  1 = 地主阵营胜
+  scores: Array<{
+    sessionId:  string,
+    scoreDelta: number,        // 正=赢分，负=输分
+    newScore:   number,        // 本局后积分
+  }>,
+  multiplier: number,          // 全局倍数 M（不含个人加倍）
+  breakdown: {
+    baseScore:      number,    // 场次底分 B（starter=1/casual=2/expert=5/peak=10）
+    landlordDouble: 1 | 2,     // dL
+    playerDoubles:  Record<string, 1 | 2>,  // sessionId → di
+    isLandlordAlone: boolean,
+    isSpring:        boolean,
+    isAntiSpring:    boolean,
+  },
 }) => {
-  // 房间即将关闭
+  // 房间即将关闭，展示结算界面
 });
 ```
+
+> **向后兼容**：`breakdown` 和 `multiplier` 为可选字段；client 收不到时降级显示 V1 格式（仅胜负 + scoreDelta）。
 
 ---
 
@@ -343,13 +434,16 @@ room.onMessage("game_over", (data: {
 
 ```typescript
 interface GameState {
-  phase:           string;            // "waiting" | "dealing" | "landlord_select" | "playing" | "settlement"
-  players:         MapSchema<Player>; // key = sessionId
-  currentTurnSeat: number;            // 0–4，-1=未开始
-  lastPlayerId:    string;            // 上次出牌者 sessionId，空串=自由回合
-  lastPlay:        ArraySchema<number>; // 上次出的牌，空=自由回合
-  landlordSeat:    number;            // 0–4
-  isAlone:         boolean;           // true=地主一挑四
+  phase:               string;              // "waiting" | "dealing" | "landlord_select" | "doubling" | "playing" | "settlement"
+  players:             MapSchema<Player>;   // key = sessionId
+  currentTurnSeat:     number;              // 0–4，-1=未开始
+  lastPlayerId:        string;              // 上次出牌者 sessionId，空串=自由回合
+  lastPlay:            ArraySchema<number>; // 上次出的牌，空=自由回合
+  landlordSeat:        number;              // 0–4
+  isAlone:             boolean;             // true=地主一挑四
+  // 加倍阶段（TASK-023 新增）
+  doublingPhase:       boolean;             // true = 当前在加倍阶段
+  landlordDoubleValue: 0 | 1 | 2;          // 0=未选，1=不加倍，2=加倍
 }
 ```
 
@@ -552,7 +646,11 @@ npx jest --testPathPattern="integration" --no-coverage --forceExit
 
 # 全套（单元 + 集成）
 npx jest --no-coverage --forceExit
-# 当前结果：266/266 通过
+# 当前结果：333/333 通过
+
+# 数值模拟校准（TASK-024，不需要 MySQL/Redis）
+npx ts-node server/tools/simulate.ts --games 100000
+npx ts-node server/tools/simulate.ts --games 10000 --sample 5  # 附带 5 局诊断样本
 ```
 
 ---
