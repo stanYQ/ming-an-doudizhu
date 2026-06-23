@@ -1,8 +1,8 @@
-# 明暗斗地主 — 协议参考手册 v1.0
+# 明暗斗地主 — 协议参考手册 v2.0
 
-> 权威来源：`server/src/` 实现，333/333 集成测试通过。  
+> 权威来源：`server/src/` 实现，356/356 集成测试通过。  
 > 适用范围：client-dev（对接指南）+ server-dev（协议规范）。  
-> 最后更新：TASK-023（加倍阶段）+ TASK-022（SettleService V2）
+> 最后更新：TASK-032s（BUG 修复 + 环境）+ TASK-031s（再来一局）+ TASK-030s（好友房）+ TASK-029s（AI 补位）+ TASK-023（加倍阶段）+ TASK-022（SettleService V2）
 
 ---
 
@@ -38,10 +38,10 @@ npm install colyseus.js
 ```typescript
 import { Client } from "colyseus.js";
 
-const client = new Client("ws://localhost:3000");
+const client = new Client("ws://localhost:2567");
 
 // 1. 登录，拿到 JWT
-const res = await fetch("http://localhost:3000/auth/login", {
+const res = await fetch("http://localhost:2567/auth/login", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ code: "wx_auth_code" }),
@@ -59,6 +59,13 @@ const room = await client.create("card_room");
 ```
 
 > **关键**：`client.auth.token = token` 必须在每次 `create` / `joinById` 前设置，否则服务端报 `3001` 鉴权失败。
+
+### 房间类型
+
+| 选项 | 说明 |
+|------|------|
+| `client.create("card_room")` | 快速匹配（默认），5 人满则开局，不足时 AI 补位 |
+| `client.create("card_room", { isFriendRoom: true })` | 好友房，房主手动 `force_start` |
 
 ---
 
@@ -157,7 +164,8 @@ export interface CardPattern {
 ─────────────────────────────────────────────────────────────────
 [所有玩家] client.auth.token = token
 [所有玩家] client.create("card_room")  ──────→ onAuth(token)  →  phase: waiting
-                                                第 5 位加入后自动发牌
+                                        ←────  [广播] waiting_update { readyCount, total:5, aiSeconds }  ← 每次有人加入/离开
+                                                第 5 位加入（或 force_start / AI 补位）后自动发牌
                                         ←────  Schema delta: phase → "dealing"
                                         ←────  [私发] your_hand { cards: number[] }    ← 每人收到自己的 20 张
                                         ←────  [私发] bottom_cards { cards: number[] } ← 仅地主收到 3 张底牌
@@ -194,8 +202,18 @@ export interface CardPattern {
 
 ── 结算 ────────────────────────────────────────────────────────
 （某玩家出完手牌）
-                                        ←────  [广播] game_over { winnerCamp, scores, multiplier, breakdown }
-                                                房间关闭，Schema 停止更新
+                                        ←────  [广播] game_over { winnerCamp, scores }
+                                                         winnerCamp: "landlord_camp" | "civilian_camp"
+                                                         scores: { [sessionId]: scoreDelta }
+
+── 再来一局（结算后 30 秒窗口期）───────────────────────────────
+[玩家] room.send("request_rematch")
+                                        ←────  [广播] rematch_update { agreedCount, total }
+（全员同意 — 好友房）
+                                        ←────  [广播] rematch_start {}  → 房间重置，重新发牌
+（快速匹配场景）
+                                        ←────  [私发] rematch_redirect { action: "requeue" }
+（30s 窗口到期）                         → 房间关闭
 ```
 
 ---
@@ -278,6 +296,48 @@ room.send("set_double", {
 
 ---
 
+### `force_start`
+
+仅好友房（`isFriendRoom: true`）的**房主**可发送，仅在 `waiting` 阶段有效。
+
+```typescript
+room.send("force_start");
+```
+
+**约束**：
+- 真实玩家数 ≥ 2 → AI 补满剩余席位，立即进入发牌
+- 真实玩家数 < 2 → `error { code: 2003, msg: "至少需要2名真实玩家才能开局" }`
+- 非房主发送 → 静默忽略
+- `dealing` 阶段后发送 → 静默忽略
+
+---
+
+### `request_rematch`
+
+结算后 30 秒窗口期内发送，表示同意再来一局。
+
+```typescript
+room.send("request_rematch");
+```
+
+- 好友房：全员同意 → `rematch_start` 广播，房间重置重新发牌
+- 快速匹配：服务端私发 `rematch_redirect { action: "requeue" }`，客户端自行重新排队
+- 30s 窗口过期 → 服务端关闭房间
+
+---
+
+### `request_hint`
+
+在 `playing` 阶段请求出牌提示（AI 推荐）。
+
+```typescript
+room.send("request_hint");
+```
+
+服务端私发 `hint { cards }` 返回推荐牌组。
+
+---
+
 ### `reconnect_sync`
 
 断线重连后请求补发当前手牌和回合状态。
@@ -286,7 +346,10 @@ room.send("set_double", {
 room.send("reconnect_sync");
 ```
 
-服务端响应：私发 `your_hand`；若在 `playing` 阶段则私发 `turn_change`；若在 `doubling` 阶段则重播 `doubling_start`。
+服务端响应：
+- 私发 `your_hand { cards }`：补发当前手牌
+- 若 `phase === "playing"`：私发 `turn_change { seatIndex, deadline }`
+- 若 `phase === "doubling"`：重播 `doubling_start { timeout, landlordSeatIndex }`
 
 ---
 
@@ -299,7 +362,7 @@ room.send("reconnect_sync");
 ```typescript
 room.onMessage("your_hand", (data: { cards: number[] }) => {
   // 初始发牌 20 张；断线重连后重发
-  // 地主收到 select_code_card 后 handCount 变 24（含 3 张底牌）
+  // 地主收到 select_code_card 后 handCount 变 23（含 3 张底牌）
   myHand = data.cards;
 });
 ```
@@ -310,8 +373,26 @@ room.onMessage("your_hand", (data: { cards: number[] }) => {
 room.onMessage("bottom_cards", (data: { cards: number[] }) => {
   // 仅地主收到，3 张底牌
   // 此时地主手牌已是 23 张（your_hand 20 张 + bottom 3 张）
-  // Schema 中 players[landlordSessionId].handCount === 23
   bottomCards = data.cards;
+});
+```
+
+#### `hint`
+
+```typescript
+room.onMessage("hint", (data: { cards: number[] }) => {
+  // AI 推荐出牌，高亮展示给当前玩家
+  highlightHintCards(data.cards);
+});
+```
+
+#### `rematch_redirect`
+
+```typescript
+room.onMessage("rematch_redirect", (data: { action: "requeue" }) => {
+  // 快速匹配再来一局：断开当前房间，跳转快速匹配界面重新排队
+  leaveRoom();
+  gotoQuickMatch();
 });
 ```
 
@@ -327,6 +408,42 @@ room.onMessage("error", (data: { code: number; msg: string }) => {
 ---
 
 ### 广播（所有玩家收到）
+
+#### `waiting_update`
+
+快速匹配等待阶段，每当有真实玩家加入或离开时广播。
+
+```typescript
+room.onMessage("waiting_update", (data: {
+  readyCount: number,  // 当前真实玩家数
+  total:      5,       // 恒为 5
+  aiSeconds:  number,  // 剩余 AI 补位倒计时（秒）；满员后为 0
+}) => {
+  updateWaitingUI(data.readyCount, data.aiSeconds);
+});
+```
+
+---
+
+#### `room_update`
+
+好友房专用，每当有玩家加入/离开时广播。
+
+```typescript
+room.onMessage("room_update", (data: {
+  players: Array<{
+    seatIndex:  number,
+    nickname:   string,
+    avatarUrl:  string,
+    isReady:    boolean,  // 预留，当前恒 false
+  }>,
+  ownerSeatIndex: number,  // 房主席位，客户端据此判断是否显示「开始游戏」按钮
+}) => {
+  renderRoomSlots(data.players, data.ownerSeatIndex);
+});
+```
+
+---
 
 #### `doubling_start`
 
@@ -369,7 +486,7 @@ room.onMessage("doubling_result", (data: {
     doubled:   boolean,  // true = 已加倍，false = 未加倍；不含角色信息
   }>,
 }) => {
-  showDoublingResult(data.results);  // 展示 1.5s 后隐藏，等待 phase → "playing"
+  showDoublingResult(data.results);
 });
 ```
 
@@ -383,9 +500,10 @@ room.onMessage("turn_change", (data: {
   deadline:  number,  // Unix 时间戳 (ms)，= Date.now() + 30000
 }) => {
   currentSeat = data.seatIndex;
-  // 用 deadline 显示倒计时
 });
 ```
+
+---
 
 #### `identity_reveal`
 
@@ -398,31 +516,49 @@ room.onMessage("identity_reveal", (data: {
 });
 ```
 
+---
+
 #### `game_over`
 
 ```typescript
 room.onMessage("game_over", (data: {
-  winnerCamp: 0 | 1,           // 0 = 平民阵营胜  1 = 地主阵营胜
-  scores: Array<{
-    sessionId:  string,
-    scoreDelta: number,        // 正=赢分，负=输分
-    newScore:   number,        // 本局后积分
-  }>,
-  multiplier: number,          // 全局倍数 M（不含个人加倍）
-  breakdown: {
-    baseScore:      number,    // 场次底分 B（starter=1/casual=2/expert=5/peak=10）
-    landlordDouble: 1 | 2,     // dL
-    playerDoubles:  Record<string, 1 | 2>,  // sessionId → di
-    isLandlordAlone: boolean,
-    isSpring:        boolean,
-    isAntiSpring:    boolean,
-  },
+  winnerCamp: "landlord_camp" | "civilian_camp",
+  scores:     Record<string, number>,  // { [sessionId]: scoreDelta }，正=赢分，负=输分
 }) => {
-  // 房间即将关闭，展示结算界面
+  showSettlement(data);
+  // multiplier / breakdown 不在广播中，仅写入 DB
 });
 ```
 
-> **向后兼容**：`breakdown` 和 `multiplier` 为可选字段；client 收不到时降级显示 V1 格式（仅胜负 + scoreDelta）。
+> `scoreDelta` 为本局积分变化量，客户端如需展示新积分，需将其叠加到本地缓存的 `score`。
+
+---
+
+#### `rematch_update`
+
+结算后每次有玩家同意再来一局时广播。
+
+```typescript
+room.onMessage("rematch_update", (data: {
+  agreedCount: number,  // 已同意玩家数
+  total:       number,  // 真实玩家总数（不含 AI）
+}) => {
+  updateRematchProgress(data.agreedCount, data.total);
+});
+```
+
+---
+
+#### `rematch_start`
+
+好友房全员同意后广播，房间状态重置，即将重新发牌。
+
+```typescript
+room.onMessage("rematch_start", (_data: {}) => {
+  hideSettlementView();
+  // 等待新一轮 your_hand 私发
+});
+```
 
 ---
 
@@ -441,7 +577,7 @@ interface GameState {
   lastPlay:            ArraySchema<number>; // 上次出的牌，空=自由回合
   landlordSeat:        number;              // 0–4
   isAlone:             boolean;             // true=地主一挑四
-  // 加倍阶段（TASK-023 新增）
+  // 加倍阶段
   doublingPhase:       boolean;             // true = 当前在加倍阶段
   landlordDoubleValue: 0 | 1 | 2;          // 0=未选，1=不加倍，2=加倍
 }
@@ -495,7 +631,7 @@ function tryPlayCards(selected: number[]): void {
     return;
   }
 
-  const lastPlay = [...room.state.lastPlay];  // ArraySchema → array
+  const lastPlay = [...room.state.lastPlay];
   if (lastPlay.length > 0) {
     const lastPat = parse(lastPlay);
     if (!canBeat(pat, lastPat)) {
@@ -523,6 +659,7 @@ function tryPlayCards(selected: number[]): void {
 | `1003` | 非当前回合出牌 | 提示"还没轮到你" |
 | `1004` | 手牌不含所出牌（客户端状态不同步） | 触发 `reconnect_sync` |
 | `2001` | 房间已满 | Colyseus 内置错误，不走 `error` 消息 |
+| `2003` | `force_start` 时真实玩家数 < 2 | 提示"至少需要2名真实玩家才能开局" |
 | `3001` | JWT 无效或过期 | Colyseus `MatchMakeError`，引导重新登录 |
 
 ### MatchMake 错误（连接层）
@@ -532,7 +669,6 @@ try {
   const room = await client.create("card_room");
 } catch (e: any) {
   if (e.code === 3001) {
-    // token 过期，重新登录
     await refreshToken();
     client.auth.token = newToken;
     // 重试
@@ -547,7 +683,6 @@ try {
 ```typescript
 room.onLeave((code) => {
   if (code > 1000) {
-    // 非正常断线，尝试重连
     reconnect();
   }
 });
@@ -560,8 +695,9 @@ async function reconnect(): Promise<void> {
 ```
 
 `reconnect_sync` 响应：
-- 私发 `your_hand { cards }`：补发当前手牌
+- 私发 `your_hand { cards }`
 - 若 `phase === "playing"`：私发 `turn_change { seatIndex, deadline }`
+- 若 `phase === "doubling"`：重播 `doubling_start { timeout, landlordSeatIndex }`
 
 ---
 
@@ -570,7 +706,7 @@ async function reconnect(): Promise<void> {
 ### POST /auth/login
 
 ```typescript
-const res = await fetch("http://host:3000/auth/login", {
+const res = await fetch("http://localhost:2567/auth/login", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ code: wxCode }),
@@ -588,7 +724,7 @@ const { token, user } = await res.json();
 ### GET /auth/me
 
 ```typescript
-const res = await fetch("http://host:3000/auth/me", {
+const res = await fetch("http://localhost:2567/auth/me", {
   headers: { "Authorization": `Bearer ${token}` },
 });
 // 200: { userId, openid, nickname, avatarUrl, score, rankLevel }
@@ -604,28 +740,47 @@ const res = await fetch("http://host:3000/auth/me", {
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `PORT` | `3000` | 监听端口 |
+| `PORT` | `2567` | 监听端口 |
 | `JWT_SECRET` | `dev_secret_change_me` | JWT 签名密钥 |
 | `AUTH_MODE` | `stub` | `stub`=跳过微信 OAuth，`wechat`=生产模式 |
-| `DB_NAME` | `game_db` | MySQL 数据库名（开发用 `mingandoudizhu`） |
+| `AI_FILL_DELAY` | `30` | AI 补位等待秒数；设 `0` 可即时补位（Demo 模式） |
 | `DB_HOST` | `localhost` | MySQL 主机 |
+| `DB_PORT` | `3306` | MySQL 端口 |
+| `DB_USER` | `root` | MySQL 用户 |
 | `DB_PASSWORD` | `` | MySQL 密码 |
+| `DB_NAME` | `game_db` | MySQL 数据库名 |
 | `REDIS_HOST` | `localhost` | Redis 主机 |
+| `REDIS_PORT` | `6379` | Redis 端口 |
 
-### 开发模式启动
+### 本地开发启动（推荐使用 .env 文件）
 
 ```bash
-# 需要 MySQL 和 Redis 在线
-DB_NAME=mingandoudizhu AUTH_MODE=stub JWT_SECRET=dev_secret npm run dev
-# 服务监听 ws://localhost:3000
+# server/.env（参考 .env.test.example）
+AUTH_MODE=stub
+JWT_SECRET=dev_secret_change_before_prod
+AI_FILL_DELAY=0
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=changeme
+DB_NAME=ddz
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+PORT=2567
+
+# 启动（需要 MySQL + Redis 在线，推荐 Docker via infra/docker-compose.yml）
+cd infra && docker compose up -d mysql redis
+cd ../server && npx ts-node --project tsconfig.json src/index.ts
+# 或
+npm run dev   # 等同于上面，需全局安装 ts-node
 ```
 
 ### 客户端连接地址
 
 | 环境 | 地址 |
 |------|------|
-| 本地开发 | `ws://localhost:3000` |
-| HTTP 接口 | `http://localhost:3000` |
+| 本地开发 | `ws://localhost:2567` |
+| HTTP 接口 | `http://localhost:2567` |
 
 ---
 
@@ -642,15 +797,15 @@ DB_NAME=mingandoudizhu AUTH_MODE=stub JWT_SECRET=dev_secret npm run dev
 
 ```bash
 # 仅跑集成测试（需要 MySQL + Redis 在线）
-npx jest --testPathPattern="integration" --no-coverage --forceExit
+npx jest --testPathPattern="integration" --no-coverage
 
 # 全套（单元 + 集成）
-npx jest --no-coverage --forceExit
-# 当前结果：333/333 通过
+npx jest --no-coverage
+# 当前结果：356/356 通过
 
-# 数值模拟校准（TASK-024，不需要 MySQL/Redis）
+# 数值模拟校准（不需要 MySQL/Redis）
 npx ts-node server/tools/simulate.ts --games 100000
-npx ts-node server/tools/simulate.ts --games 10000 --sample 5  # 附带 5 局诊断样本
+npx ts-node server/tools/simulate.ts --games 10000 --sample 5
 ```
 
 ---

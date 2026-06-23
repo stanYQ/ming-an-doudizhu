@@ -10,6 +10,8 @@
 
 ## 当前进行中
 
+- [ ] TASK-035 [client] C001-C007 bugfix批次一（setConnected/setToken/init重复/state补case/showLastPlay/防连点） | 认领: client-dev | 开始: 2026-06-23
+
 
 
 

@@ -71,4 +71,11 @@
 ## P4.4 任务（集成冒烟 + Demo 准备）
 
 - [x] TASK-032s [server] 集成冒烟准备：修 BUG-001/002/003/004 + 启动环境验证 → spec: specs/integration-smoke.md **[done: 356/356]**
-- [ ] TASK-032c [client] 全流程集成冒烟测试：Node.js 直连真实 server，跑完整游戏流程 → spec: specs/integration-smoke.md **[blocked: 等 TASK-032s]**
+- [x] TASK-032c [client] 全流程集成冒烟测试：Node.js 直连真实 server，跑完整游戏流程 → spec: specs/integration-smoke.md **[done: 9/9 AC]**
+
+## P4.5 任务（协议对齐）
+
+- [x] TASK-033 [client] Client ↔ PROTOCOL.md 对齐：NetManager 单例 + auth token + play_broadcast 移除 + landlordSeat 修正 + suit 类型 + bottom_cards/hint 路由 → spec: specs/client-protocol-align.md **[done: 233/233]**
+
+- [ ] TASK-034 [server] Bug 修复批次一：ISSUE-005 handlePass守卫 + ISSUE-006 landlord_select超时 + ISSUE-001 realPlayerCount递减 + ISSUE-007 重连补全 → spec: specs/bugfix-server-034.md **[ready]**
+- [ ] TASK-035 [client] Bug 修复批次一：ISSUE-C001 setConnected + ISSUE-C002~C007 → spec: specs/bugfix-client-035.md **[ready；Step 7 冒烟等 TASK-034 完成后执行]**
