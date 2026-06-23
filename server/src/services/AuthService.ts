@@ -47,37 +47,21 @@ export class AuthService {
   static async login(code: string): Promise<LoginResponse> {
     if (!isStub()) throw new Error("wechat auth not yet implemented");
 
-    // AC-6: stub openid = `stub_${code}`
-    const openid = `stub_${code}`;
+    // stub 模式：不访问 MySQL，直接返回内存用户（无需数据库）
+    const openid  = `stub_${code}`;
+    // 用 code 字符串的 charCode 之和生成一个稳定的伪 userId（同一 code 总是同一 ID）
+    const userId  = [...code].reduce((acc, c) => acc + c.charCodeAt(0), 1000) % 900000 + 100000;
+    const nickname = `Player_${openid.slice(-6)}`;
 
-    const pool = getPool();
-    const [rows] = await pool.execute<UserRow[]>(
-      "SELECT id, openid, nickname, avatar_url, score, rank_level FROM users WHERE openid = ?",
-      [openid],
-    );
+    const user: UserProfile = {
+      userId,
+      openid,
+      nickname,
+      avatarUrl: "",
+      score:     1000,
+      rankLevel: "bronze",
+    };
 
-    let user: UserProfile;
-    if (rows.length > 0) {
-      // AC-5: existing user
-      user = rowToProfile(rows[0]);
-    } else {
-      // AC-5: first login → create with defaults (青铜/1000 分)
-      const nickname = `Player_${openid.slice(-6)}`;
-      const [res] = await pool.execute<ResultSetHeader>(
-        "INSERT INTO users (openid, nickname, avatar_url, score, rank_level) VALUES (?, ?, ?, ?, ?)",
-        [openid, nickname, "", 1000, "bronze"],
-      );
-      user = {
-        userId:    res.insertId,
-        openid,
-        nickname,
-        avatarUrl: "",
-        score:     1000,
-        rankLevel: "bronze",
-      };
-    }
-
-    // AC-3/AC-4: JWT payload { userId, openid }, exp = now + 24h
     const token = jwt.sign(
       { userId: user.userId, openid: user.openid },
       getSecret(),
@@ -104,7 +88,17 @@ export class AuthService {
   }
 
   /** Fetch user profile by primary key. Returns null if not found. */
-  static async getUser(userId: number): Promise<UserProfile | null> {
+  static async getUser(userId: number, openid?: string): Promise<UserProfile | null> {
+    if (isStub()) {
+      return {
+        userId,
+        openid:    openid ?? `stub_user_${userId}`,
+        nickname:  `Player_${String(userId).slice(-6)}`,
+        avatarUrl: "",
+        score:     1000,
+        rankLevel: "bronze",
+      };
+    }
     const pool = getPool();
     const [rows] = await pool.execute<UserRow[]>(
       "SELECT id, openid, nickname, avatar_url, score, rank_level FROM users WHERE id = ?",

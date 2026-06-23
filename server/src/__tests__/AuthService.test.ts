@@ -75,26 +75,18 @@ describe("AuthService.login()", () => {
     expect(exp - iat).toBe(86400);
   });
 
-  it("AC-5: existing user — returns DB record, no INSERT", async () => {
-    const pool = mockPool([EXISTING_USER_ROW]);
-    (getPool as jest.Mock).mockReturnValue(pool);
-    const { user } = await AuthService.login("hello");
-    expect(user.userId).toBe(42);
-    expect(user.score).toBe(1500);
-    expect(user.rankLevel).toBe("silver");
-    // execute called once (SELECT only)
-    expect(pool.execute).toHaveBeenCalledTimes(1);
+  it("AC-5: stub login — same code yields stable userId, no DB call", async () => {
+    const { user }        = await AuthService.login("hello");
+    const { user: user2 } = await AuthService.login("hello");
+    expect(user.userId).toBe(user2.userId);
+    expect(user.userId).toBeGreaterThan(0);
+    expect(getPool as jest.Mock).not.toHaveBeenCalled();
   });
 
-  it("AC-5: first login — creates user with bronze/1000 defaults", async () => {
-    const pool = mockPool([], 99); // SELECT returns empty, INSERT insertId=99
-    (getPool as jest.Mock).mockReturnValue(pool);
+  it("AC-5: stub 默认分数 1000，段位 bronze", async () => {
     const { user } = await AuthService.login("newuser");
-    expect(user.userId).toBe(99);
     expect(user.score).toBe(1000);
     expect(user.rankLevel).toBe("bronze");
-    // SELECT + INSERT = 2 calls
-    expect(pool.execute).toHaveBeenCalledTimes(2);
   });
 
   it("AC-6: stub openid = `stub_${code}`", async () => {

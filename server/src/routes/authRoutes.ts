@@ -47,7 +47,7 @@ export async function handleMe(req: IncomingMessage, res: ServerResponse): Promi
   if (!payload) { json(res, 401, { error: "unauthorized" }); return; }
 
   // AC-9: valid token → user profile
-  const user = await AuthService.getUser(payload.userId);
+  const user = await AuthService.getUser(payload.userId, payload.openid);
   if (!user) { json(res, 404, { error: "user not found" }); return; }
   json(res, 200, user);
 }
