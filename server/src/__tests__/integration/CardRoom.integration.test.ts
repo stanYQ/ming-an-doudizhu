@@ -410,20 +410,22 @@ describe("WS — play phase happy path", () => {
   }, 25000);
 
   it("pass：turn 前进到下一席位", async () => {
-    const { clients, currentSeat, serverRoom } = await setupPlaying(colyseus);
-    const nextSeat = (currentSeat + 1) % 5;
+    const { clients, hands, currentSeat, serverRoom } = await setupPlaying(colyseus);
+    const nextSeat     = (currentSeat + 1) % 5;
+    const nextNextSeat = (nextSeat    + 1) % 5;
 
-    // 先出一张牌建立 lastPlay，再让下一家 pass
-    const card = serverRoom.state.lastPlayerId === ""
-      ? null
-      : null; // lastPlay 为空时 pass 是合法的（自由轮 pass）
+    // 先出一张牌建立 lastPlay（自由轮 pass 被服务端拒绝，需先有人出牌）
+    const p1Turn = waitMsg(clients[nextSeat], "turn_change", 4000);
+    clients[currentSeat].send("play_cards", { cards: [hands[currentSeat][0]] });
+    await p1Turn;
 
-    const nextTurn = waitMsg(clients[nextSeat], "turn_change", 4000);
-    clients[currentSeat].send("pass", {});
-    await nextTurn;
+    // 下一家 pass（非自由轮，合法）
+    const p2Turn = waitMsg(clients[nextNextSeat], "turn_change", 4000);
+    clients[nextSeat].send("pass", {});
+    await p2Turn;
 
     await new Promise(r => setTimeout(r, 100));
-    expect(serverRoom.state.currentTurnSeat).toBe(nextSeat);
+    expect(serverRoom.state.currentTurnSeat).toBe(nextNextSeat);
 
     clients.forEach(c => c.leave());
   }, 25000);

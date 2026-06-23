@@ -462,7 +462,8 @@ describe("CardRoom — doubling phase (TASK-023)", () => {
     // Only landlord submits; others don't
     msg(room, "set_double", clients[0], { value: 1 });
     // Fire the doubling timer (first timer created by startDoubling)
-    const doublingTimerFn = timerFns.find((_, i) => i === 0);
+    // timerFns[0] = landlord_select timer (TASK-034); timerFns[1] = doubling timer
+    const doublingTimerFn = timerFns.find((_, i) => i === 1);
     doublingTimerFn!();
     expect(room.state.phase).toBe("playing");
   });
@@ -577,5 +578,157 @@ describe("CardRoom — doubling phase (TASK-023)", () => {
     const result = broadcasts.find(b => b.type === "doubling_result")!;
     const res = (result.data as any).results as Array<{ doubled: boolean }>;
     expect(res.every(r => r.doubled === false)).toBe(true);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TASK-034: Bug Fixes — ISSUE-005 / 006 / 001 / 007
+// ══════════════════════════════════════════════════════════════════════════════
+
+describe("ISSUE-005 — handlePass free-round guard", () => {
+  it("AC-1: pass on empty lastPlay (free round) → error 1002", () => {
+    const { room, clients } = setupPlaying();
+    // At game start, lastPlay is empty — p0 must play, not pass
+    expect([...room.state.lastPlay].length).toBe(0);
+    msg(room, "pass", clients[0]);
+    const err = clients[0].send.mock.calls.find(([t]: [string]) => t === "error");
+    expect(err).toBeDefined();
+    expect(err![1].code).toBe(1002);
+  });
+
+  it("AC-2: pass when lastPlayerId === self → error 1002", () => {
+    const { room, clients } = setupPlaying();
+    // Force state: non-empty lastPlay but it was p0 who last played
+    room.state.currentTurnSeat = 0;
+    (room.state.lastPlay as any).push(7); // non-empty
+    room.state.lastPlayerId = clients[0].sessionId;
+    msg(room, "pass", clients[0]);
+    const err = clients[0].send.mock.calls.find(([t]: [string]) => t === "error");
+    expect(err).toBeDefined();
+    expect(err![1].code).toBe(1002);
+  });
+
+  it("AC-3: pass on follow round (lastPlay non-empty, lastPlayerId ≠ self) → accepted", () => {
+    const { room, clients } = setupPlaying();
+    msg(room, "play_cards", clients[0], { cards: [0] }); // p0 plays; turn → p1
+    const seatBefore = room.state.currentTurnSeat;
+    msg(room, "pass", clients[1]); // p1 follows (not free round)
+    const err = clients[1].send.mock.calls.find(([t]: [string]) => t === "error");
+    expect(err).toBeUndefined();
+    expect(room.state.currentTurnSeat).not.toBe(seatBefore);
+  });
+});
+
+describe("ISSUE-006 — landlord_select timeout", () => {
+  it("AC-4: entering landlord_select starts a timeout timer", () => {
+    const { room, timerFns } = buildRoom();
+    addClients(room, 5);
+    expect(room.state.phase).toBe("landlord_select");
+    // timerFns[0] = landlord_select timer
+    expect(timerFns.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("AC-5: timer fires → auto-selects { suit:0 value:0 } → doubling phase", () => {
+    const { room, timerFns } = buildRoom();
+    addClients(room, 5);
+    expect(room.state.phase).toBe("landlord_select");
+    timerFns[0](); // fire landlord_select timer
+    expect(room.state.phase).toBe("doubling");
+  });
+
+  it("AC-6: landlord submits before timeout → landlord_select timer cleared", () => {
+    const { room, timers } = buildRoom();
+    const clients = addClients(room, 5);
+    const lsTimer = timers[0];
+    msg(room, "select_code_card", clients[0], { suit: 0, value: 0 });
+    expect(lsTimer.clear).toHaveBeenCalled();
+    expect(room.state.phase).toBe("doubling");
+  });
+
+  it("AC-7: reconnect during landlord_select does NOT clear the timeout timer", () => {
+    const { room, timers } = buildRoom();
+    const clients = addClients(room, 5);
+    const lsTimer = timers[0];
+    clients[0].send.mockClear();
+    (room as any).handleReconnectSync(clients[0]);
+    expect(lsTimer.clear).not.toHaveBeenCalled();
+  });
+});
+
+describe("ISSUE-001 — realPlayerCount decrements on leave in all phases", () => {
+  it("AC-8: real player leaves during playing phase → realPlayerCount decremented", async () => {
+    const { room, clients } = setupPlaying();
+    const before = (room as any).realPlayerCount;
+    (room as any).allowReconnection = jest.fn().mockRejectedValue(new Error("timeout"));
+    await room.onLeave(clients[0] as any, false);
+    expect((room as any).realPlayerCount).toBe(before - 1);
+  });
+
+  it("AC-9: settlement, 1 player leaves → remaining N-1 rematch → doRematch", async () => {
+    const { room, clients, broadcasts } = setupPlaying();
+    (room as any).isFriendRoom = true; // friend room: votes tracked
+    // Drain p0's hand to trigger game_over
+    const hand = (room as any).hands.get(clients[0].sessionId) as number[];
+    const lastCard = hand[0];
+    hand.splice(1);
+    room.state.players.get(clients[0].sessionId)!.handCount = 1;
+    msg(room, "play_cards", clients[0], { cards: [lastCard] });
+    expect(room.state.phase).toBe("settlement");
+    // p4 leaves
+    (room as any).allowReconnection = jest.fn().mockRejectedValue(new Error("timeout"));
+    await room.onLeave(clients[4] as any, false);
+    expect((room as any).realPlayerCount).toBe(4);
+    // Remaining p0–p3 all request rematch
+    broadcasts.length = 0;
+    for (let i = 0; i < 4; i++) msg(room, "request_rematch", clients[i]);
+    const rematchStart = broadcasts.find(b => b.type === "rematch_start");
+    expect(rematchStart).toBeDefined();
+  });
+
+  it("AC-10: AI player leaves → realPlayerCount unchanged", async () => {
+    const { room } = buildRoom();
+    const c0 = mkClient("p0");
+    (room as any).clients.push(c0);
+    room.onJoin(c0 as any, {});
+    const aiSid = "ai_test01";
+    (room as any).aiSessionIds.add(aiSid);
+    const fakeAi = { sessionId: aiSid, send: jest.fn() };
+    const before = (room as any).realPlayerCount;
+    (room as any).allowReconnection = jest.fn().mockRejectedValue(new Error("timeout"));
+    await room.onLeave(fakeAi as any, false);
+    expect((room as any).realPlayerCount).toBe(before);
+  });
+});
+
+describe("ISSUE-007 — handleReconnectSync landlord_select branch", () => {
+  it("AC-11: any player reconnecting in landlord_select → receives your_hand", () => {
+    const { room } = buildRoom();
+    const clients = addClients(room, 5);
+    expect(room.state.phase).toBe("landlord_select");
+    clients[1].send.mockClear();
+    (room as any).handleReconnectSync(clients[1]);
+    const handMsg = clients[1].send.mock.calls.find(([t]: [string]) => t === "your_hand");
+    expect(handMsg).toBeDefined();
+  });
+
+  it("AC-12: landlord reconnects in landlord_select → also gets bottom_cards + landlord_select_start", () => {
+    const { room } = buildRoom();
+    const clients = addClients(room, 5);
+    clients[0].send.mockClear();
+    (room as any).handleReconnectSync(clients[0]);
+    const bottomMsg = clients[0].send.mock.calls.find(([t]: [string]) => t === "bottom_cards");
+    const startMsg  = clients[0].send.mock.calls.find(([t]: [string]) => t === "landlord_select_start");
+    expect(bottomMsg).toBeDefined();
+    expect(bottomMsg![1].cards).toEqual([105, 106, 107]);
+    expect(startMsg).toBeDefined();
+  });
+
+  it("AC-13: non-landlord reconnects in landlord_select → no bottom_cards", () => {
+    const { room } = buildRoom();
+    const clients = addClients(room, 5);
+    clients[1].send.mockClear();
+    (room as any).handleReconnectSync(clients[1]);
+    const bottomMsg = clients[1].send.mock.calls.find(([t]: [string]) => t === "bottom_cards");
+    expect(bottomMsg).toBeUndefined();
   });
 });

@@ -28,22 +28,29 @@ export class CardRoom extends Room<GameState> {
     return payload;
   }
 
-  // Private game state — never enters Schema
+  // 手牌绝不入 Schema —— Schema 是公开广播的，入了等于告诉所有人手牌
   private hands        = new Map<string, number[]>();
   private timeoutCount = new Map<string, number>();
+  // 三次超时后进入"托管"：后续回合由 executeManagedAction 代为出牌，直到本局结束
   private managed      = new Set<string>();
   private landlordId   = "";
   private partnerId: string | null = null;
   private codeCardPair: number[]   = [];
   private passCount    = 0;
-  private seatMap: string[] = []; // seatIndex → sessionId
-  private turnTimer: { clear(): void } | null = null;
+  // startDealing 后固定不变；index = 席位号，value = sessionId（因 AI fake client 需要按席索引）
+  private seatMap: string[] = [];
+  private turnTimer:           { clear(): void } | null = null;
+  // 地主断线时兜底：超时自动以默认暗号牌推进，避免游戏永久挂起（ISSUE-006）
+  private landlordSelectTimer: { clear(): void } | null = null;
+  // 底牌不进 Schema；断线重连时需从内存重播给地主（ISSUE-007）
+  private bottomCards: number[] = [];
 
   // Doubling phase state
-  private doublingTimer:            { clear(): void } | null = null;
-  private doublingSubmits           = new Map<string, 1|2>(); // confirmed submissions
-  private pendingDoubles            = new Map<string, 1|2>(); // queued before landlord submits
-  private landlordDoubleSubmitted   = false;
+  private doublingTimer:          { clear(): void } | null = null;
+  private doublingSubmits         = new Map<string, 1|2>(); // 已确认的加倍提交（地主提交后才写入非地主）
+  // 非地主可能在地主提交前就发来 set_double；先缓存，等地主确认后统一 flush（保证地主倍率先到）
+  private pendingDoubles          = new Map<string, 1|2>();
+  private landlordDoubleSubmitted = false;
   doublingData: {
     landlordDouble: 1|2;
     playerDoubles:  Map<string, 1|2>;
@@ -61,16 +68,17 @@ export class CardRoom extends Room<GameState> {
   private userIdMap                 = new Map<string, number>(); // sessionId → userId
 
   // AI fill — TASK-029s / 030s
-  private aiFillEnabled   = false;               // 仅快速匹配房且显式开启时为 true
-  private isFriendRoom    = false;               // 好友房模式：room_update + force_start
-  private aiFillDelay     = 30;                  // AI 补位倒计时（秒），可由 roomOptions 覆盖
-  private aiFillRemaining = 0;                   // 剩余秒数，广播给客户端
-  private aiFillTimer:    { clear(): void } | null = null; // 主补位触发定时器
-  private aiFillTicker:   { clear(): void } | null = null; // 每秒更新 aiSeconds 的滚动定时器
-  // AI 玩家的 fake client 直接 push 进 this.clients——Colyseus clients 在单元测试中是普通数组，
-  // 生产环境同样支持 push；AI 不发真实 WebSocket 消息，send 为 no-op
-  private aiSessionIds    = new Set<string>();   // 标记哪些 sessionId 是 AI，绕过 turn timer
-  private realPlayerCount = 0;                   // 真实玩家数，rematch total / waitingUpdate 依据
+  private aiFillEnabled   = false;  // 仅快速匹配房且显式开启时为 true
+  private isFriendRoom    = false;  // 好友房模式：room_update + force_start 协议
+  private aiFillDelay     = 30;     // AI 补位倒计时（秒），可由 roomOptions / AI_FILL_DELAY env 覆盖
+  private aiFillRemaining = 0;      // 剩余秒数，随 waiting_update 广播给客户端
+  private aiFillTimer:  { clear(): void } | null = null; // 倒计时结束时触发补位+发牌
+  private aiFillTicker: { clear(): void } | null = null; // 每秒递减 aiFillRemaining（setTimeout 链，兼容 clock mock）
+  // AI fake client 直接 push 进 this.clients：Colyseus clients 是普通数组，生产和测试均支持 push；
+  // AI 的 send 是 no-op，不发真实 WebSocket 消息
+  private aiSessionIds    = new Set<string>(); // 标记 AI sessionId，绕过 turnTimer / rematch 计票
+  // realPlayerCount 有两个用途：① waiting_update 的 readyCount ② rematch 票数阈值（ISSUE-001 修复点）
+  private realPlayerCount = 0;
   private nicknameMap     = new Map<string, string>(); // sessionId → 昵称，供 room_update 使用
 
   // Rematch — TASK-031s
@@ -134,24 +142,28 @@ export class CardRoom extends Room<GameState> {
   }
 
   onDispose(): void {
-    if (this.doublingTimer) { this.doublingTimer.clear(); this.doublingTimer = null; }
-    if (this.turnTimer)     { this.turnTimer.clear();     this.turnTimer     = null; }
-    if (this.aiFillTimer)   { this.aiFillTimer.clear();   this.aiFillTimer   = null; }
-    if (this.aiFillTicker)  { this.aiFillTicker.clear();  this.aiFillTicker  = null; }
-    if (this.rematchWindow) { this.rematchWindow.clear(); this.rematchWindow  = null; }
+    if (this.doublingTimer)       { this.doublingTimer.clear();       this.doublingTimer       = null; }
+    if (this.turnTimer)           { this.turnTimer.clear();           this.turnTimer           = null; }
+    if (this.landlordSelectTimer) { this.landlordSelectTimer.clear(); this.landlordSelectTimer = null; }
+    if (this.aiFillTimer)         { this.aiFillTimer.clear();         this.aiFillTimer         = null; }
+    if (this.aiFillTicker)        { this.aiFillTicker.clear();        this.aiFillTicker        = null; }
+    if (this.rematchWindow)       { this.rematchWindow.clear();       this.rematchWindow       = null; }
   }
 
   async onLeave(client: Client, _consented: boolean): Promise<void> {
+    // ISSUE-001: 所有阶段均递减，保证 rematch 票数阈值与实际在线人数一致。
+    // waiting 阶段仅广播更新后提前返回；游戏中则尝试保留席位 60s。
+    if (!this.aiSessionIds.has(client.sessionId)) {
+      this.realPlayerCount = Math.max(0, this.realPlayerCount - 1);
+    }
+
     if (this.state.phase === "waiting") {
-      if (!this.aiSessionIds.has(client.sessionId)) {
-        this.realPlayerCount = Math.max(0, this.realPlayerCount - 1);
-      }
       if (this.isFriendRoom) this.broadcastRoomUpdate();
       else if (this.aiFillEnabled) this.broadcastWaitingUpdate();
       return;
     }
     try {
-      // Hold the seat for 60 s; resolve = reconnected, reject = timed out
+      // 保留席位 60s：resolve = 重连成功，reject = 超时
       await this.allowReconnection(client, 60);
       this.handleReconnectSync(client);
     } catch {
@@ -166,6 +178,7 @@ export class CardRoom extends Room<GameState> {
 
     const deck       = Deck.shuffle();
     const { hands, bottom, faceUpCard } = Deck.deal(deck);
+    this.bottomCards  = bottom;                                    // ISSUE-007: store for reconnect sync
     const landlordSeat = Deck.findLandlordSeat(hands, faceUpCard);
 
     this.state.landlordSeat = landlordSeat;
@@ -193,6 +206,17 @@ export class CardRoom extends Room<GameState> {
 
     this.state.phase = "landlord_select";
 
+    // 地主断线时无 turnTimer 兜底，游戏会永久挂起（ISSUE-006）；
+    // 超时后以 { suit:0, value:0 } 自动提交，与地主主动提交走同一路径。
+    // LANDLORD_SELECT_TIMEOUT env 方便测试设 0 快速触发。
+    const lsTimeout = Number(process.env.LANDLORD_SELECT_TIMEOUT ?? 30);
+    this.landlordSelectTimer = this.clock.setTimeout(() => {
+      if (this.state.phase === "landlord_select") {
+        const fc = this.clients.find(c => c.sessionId === this.landlordId) as Client;
+        if (fc) this.handleSelectCode(fc, { suit: 0, value: 0 });
+      }
+    }, lsTimeout * 1000);
+
     // Auto-select code card when landlord is an AI player
     if (this.aiSessionIds.has(this.landlordId)) {
       const fakeClient = this.clients.find(c => c.sessionId === this.landlordId) as Client;
@@ -206,10 +230,16 @@ export class CardRoom extends Room<GameState> {
     // reserved for lobby flow
   }
 
+  /**
+   * 处理地主选择暗号牌。非地主发送静默忽略（防止客户端漏洞跳过地主选牌）。
+   * 提交后立即取消超时定时器，进入加倍阶段。
+   */
   private handleSelectCode(client: Client, msg: { suit: number; value: number }): void {
-    // AC-4: only landlord can pick code card; silently ignore others
+    // 非地主静默忽略，避免任意玩家抢占地主操作
     if (client.sessionId !== this.landlordId) return;
     if (this.state.phase !== "landlord_select") return;
+    // 正常提交或超时自动提交均走此路径；取消兜底定时器防止重复触发
+    this.cancelLandlordSelectTimer();
 
     const sel: CodeCardSelection = { suit: msg.suit, rank: msg.value };
     if (!CodeCard.isValidSelection(sel)) {
@@ -303,6 +333,14 @@ export class CardRoom extends Room<GameState> {
     const player = this.state.players.get(client.sessionId);
     if (!player || player.seatIndex !== this.state.currentTurnSeat) return;
 
+    // ISSUE-005: free round — player must play a card, cannot pass
+    const isNewRound = this.state.lastPlay.length === 0 ||
+                       this.state.lastPlayerId === client.sessionId;
+    if (isNewRound) {
+      client.send("error", { code: 1002, msg: "自由出牌轮不可 pass" });
+      return;
+    }
+
     this.cancelTurnTimer();
     this.passCount++;
 
@@ -320,7 +358,13 @@ export class CardRoom extends Room<GameState> {
   private handleReconnectSync(client: Client): void {
     const hand = this.hands.get(client.sessionId) ?? [];
     client.send("your_hand", { cards: hand });
-    if (this.state.phase === "doubling") {
+    if (this.state.phase === "landlord_select") {
+      // ISSUE-007: landlord needs bottom cards + prompt to reopen code-card selector
+      if (client.sessionId === this.landlordId) {
+        client.send("bottom_cards",         { cards: this.bottomCards });
+        client.send("landlord_select_start", {});
+      }
+    } else if (this.state.phase === "doubling") {
       // AC-12: replay doubling_start so reconnected client knows the phase
       client.send("doubling_start", {
         timeout:           30,
@@ -411,6 +455,13 @@ export class CardRoom extends Room<GameState> {
     }
     this.pendingDoubles.clear();
     this.finishDoubling();
+  }
+
+  private cancelLandlordSelectTimer(): void {
+    if (this.landlordSelectTimer) {
+      this.landlordSelectTimer.clear();
+      this.landlordSelectTimer = null;
+    }
   }
 
   private cancelDoublingTimer(): void {
