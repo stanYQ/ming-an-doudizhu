@@ -5,5 +5,11 @@
   "uuid": "c40d9479-2522-482c-b4d0-031f9b73c549",
   "files": [],
   "subMetas": {},
-  "userData": {}
+  "userData": {
+    "isBundle": true,
+    "bundleName": "hall",
+    "priority": 1,
+    "compressionType": {},
+    "isRemoteBundle": {}
+  }
 }

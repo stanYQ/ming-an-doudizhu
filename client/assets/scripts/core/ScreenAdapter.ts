@@ -1,9 +1,10 @@
-import { _decorator, Component, Canvas, ResolutionPolicy, view, screen, sys } from 'cc';
+import { _decorator, Component, ResolutionPolicy, view, screen, sys } from 'cc';
 const { ccclass } = _decorator;
 
 /**
- * 挂载到启动场景根节点。
- * 职责：锁横屏 + 设计分辨率 1280×720 + 安全区 inset 暴露。
+ * @file ScreenAdapter.ts
+ * @description 挂载到 Canvas 节点。职责：设计分辨率 1280×720 + 安全区 inset 暴露。
+ * @module client/core
  */
 @ccclass('ScreenAdapter')
 export class ScreenAdapter extends Component {
@@ -11,18 +12,16 @@ export class ScreenAdapter extends Component {
     static safeArea = { top: 0, bottom: 0, left: 0, right: 0 };
 
     onLoad() {
-        this._lockLandscape();
         this._setDesignResolution();
         this._updateSafeArea();
+        // 全屏锁横屏需要用户手势触发，由用户首次点击时调用 ScreenAdapter.requestFullscreen()
     }
 
-    private _lockLandscape() {
-        // H5 / Web-Mobile：请求横屏锁定
+    /** 在用户手势回调中调用（点击按钮等），否则浏览器拒绝 */
+    static requestFullscreen() {
         if (screen.supportsFullScreen) {
-            screen.requestFullScreen(null, null);
+            screen.requestFullScreen();
         }
-        // 小程序端方向锁通过 builder 构建配置声明（project.config.json orientation: landscape）
-        // Native 端通过 Xcode / Android Manifest 声明，不在此处理
     }
 
     private _setDesignResolution() {
@@ -33,17 +32,17 @@ export class ScreenAdapter extends Component {
     private _updateSafeArea() {
         const rect = sys.getSafeAreaRect();
         const visibleSize = view.getVisibleSize();
-        const frameSize = view.getFrameSize();
+        // screen.windowSize 替代已废弃的 view.getFrameSize()
+        const windowSize = screen.windowSize;
 
-        // 将像素 inset 转换为设计坐标系
-        const scaleX = visibleSize.width / frameSize.width;
-        const scaleY = visibleSize.height / frameSize.height;
+        const scaleX = visibleSize.width  / windowSize.width;
+        const scaleY = visibleSize.height / windowSize.height;
 
         ScreenAdapter.safeArea = {
-            top: (frameSize.height - rect.y - rect.height) * scaleY,
+            top:    (windowSize.height - rect.y - rect.height) * scaleY,
             bottom: rect.y * scaleY,
-            left: rect.x * scaleX,
-            right: (frameSize.width - rect.x - rect.width) * scaleX,
+            left:   rect.x * scaleX,
+            right:  (windowSize.width - rect.x - rect.width) * scaleX,
         };
     }
 }

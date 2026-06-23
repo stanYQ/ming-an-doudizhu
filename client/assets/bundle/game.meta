@@ -5,5 +5,11 @@
   "uuid": "6f1cca41-fca3-4c2b-a506-b9cd34ec9138",
   "files": [],
   "subMetas": {},
-  "userData": {}
+  "userData": {
+    "isBundle": true,
+    "bundleName": "game",
+    "priority": 1,
+    "compressionType": {},
+    "isRemoteBundle": {}
+  }
 }
