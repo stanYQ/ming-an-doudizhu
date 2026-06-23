@@ -255,3 +255,59 @@ describe('MatchView — TASK-030c: 好友房等待室', () => {
         await expect(v.onShareClick()).resolves.toBeUndefined();
     });
 });
+
+// ===== TASK-035 AC-12/AC-13: 防重入 _joining 标志 =====
+
+describe('MatchView — TASK-035: 防重入（_joining 标志）', () => {
+    // AC-12: showQuickMatch 执行中再次调用静默忽略
+    // 原理：两次 showQuickMatch() 同步发起，p1 在 await _joinRoom 处暂停，
+    // 此时 p2 被同步调用；若有 _joining 守卫，p2 立即返回不调用 _joinRoom。
+    test('TASK-035 AC-12a: showQuickMatch 执行中再次调用静默忽略', async () => {
+        const v = makeView();
+        v._joinRoom = jest.fn().mockResolvedValue({});
+
+        const p1 = v.showQuickMatch();  // await 暂停，控制权回到调用处
+        const p2 = v.showQuickMatch();  // 同步调用，此时 _joining 应为 true
+
+        await Promise.all([p1, p2]);
+
+        expect(v._joinRoom).toHaveBeenCalledTimes(1); // 只发起一次 join
+    });
+
+    // AC-12: onCreateRoomClick 同样受 _joining 保护
+    test('TASK-035 AC-12b: onCreateRoomClick 执行中再次调用静默忽略', async () => {
+        const v = makeView();
+        v._joinRoom = jest.fn().mockResolvedValue({});
+
+        const p1 = v.onCreateRoomClick();
+        const p2 = v.onCreateRoomClick(); // await 暂停前的同步第二次调用
+
+        await Promise.all([p1, p2]);
+
+        expect(v._joinRoom).toHaveBeenCalledTimes(1);
+    });
+
+    // AC-13: joinRoom 成功后 _joining 复位，允许再次匹配
+    test('TASK-035 AC-13: joinRoom 完成后 _joining 复位，允许重新发起', async () => {
+        const v = makeView();
+        v._joinRoom = jest.fn().mockResolvedValue({});
+
+        await v.showQuickMatch();          // 第一次完成
+        await v.showQuickMatch();          // 第二次：_joining 已复位，应正常发起
+
+        expect(v._joinRoom).toHaveBeenCalledTimes(2);
+    });
+
+    // AC-13b: joinRoom 失败后 _joining 同样复位，允许重试
+    test('TASK-035 AC-13b: joinRoom 失败后 _joining 复位，允许重试', async () => {
+        const v = makeView();
+        v._joinRoom = jest.fn()
+            .mockRejectedValueOnce(new Error('network error'))
+            .mockResolvedValueOnce({});
+
+        try { await v.showQuickMatch(); } catch { /* 首次失败，预期 */ }
+        await v.showQuickMatch(); // 重试
+
+        expect(v._joinRoom).toHaveBeenCalledTimes(2);
+    });
+});

@@ -4,6 +4,9 @@ jest.mock('db://oops-framework/core/common/event/MessageManager', () => ({
     message: { dispatchEvent: mockDispatchEvent },
 }));
 
+// G7 单例测试：两次 import 必须是同一对象引用
+import { netManager } from '../net/NetManager';
+
 // ---- Colyseus mock ----
 const mockSend = jest.fn();
 const messageHandlers: Record<string, (msg: any) => void> = {};
@@ -68,10 +71,11 @@ test('AC-3: joinRoom 失败时抛出错误', async () => {
 // ===== AC-4 ~ AC-9: 消息路由 =====
 const routingCases: [string, string][] = [
     ['your_hand',        'HAND'],
+    ['bottom_cards',     'BOTTOM_CARDS'],
+    ['hint',             'HINT'],
     ['identity_reveal',  'REVEAL'],
     ['game_over',        'OVER'],
     ['turn_change',      'TURN'],
-    ['play_broadcast',   'PLAY'],
     ['error',            'ERROR'],
     ['doubling_start',   'DOUBLING_START'],
     ['landlord_doubled', 'LANDLORD_DOUBLED'],
@@ -125,10 +129,10 @@ test('AC-12: pass 发送 pass', async () => {
     expect(mockSend).toHaveBeenCalledWith('pass');
 });
 
-test('AC-13: selectCodeCard 发送 select_code_card', async () => {
+test('AC-13: selectCodeCard 发送 select_code_card（suit 为 number）', async () => {
     await setupWithRoom();
-    manager.selectCodeCard('heart', 3);
-    expect(mockSend).toHaveBeenCalledWith('select_code_card', { suit: 'heart', value: 3 });
+    manager.selectCodeCard(1, 3);
+    expect(mockSend).toHaveBeenCalledWith('select_code_card', { suit: 1, value: 3 });
 });
 
 test('AC-14: reconnectSync 发送 reconnect_sync', async () => {
@@ -148,7 +152,7 @@ test('AC-16: room 为 null 时所有 send 方法静默忽略', () => {
     manager.init('ws://localhost:2567');
     expect(() => manager.playCards([1])).not.toThrow();
     expect(() => manager.pass()).not.toThrow();
-    expect(() => manager.selectCodeCard('spade', 1)).not.toThrow();
+    expect(() => manager.selectCodeCard(0, 1)).not.toThrow();
     expect(() => manager.reconnectSync()).not.toThrow();
     expect(() => manager.requestHint()).not.toThrow();
     expect(() => manager.setDouble(1)).not.toThrow();
@@ -193,4 +197,37 @@ test('TASK-031c: leaveRoom 调用 room.leave() 并清除引用', async () => {
     // 离开后 send 方法静默忽略（room 已 null）
     expect(() => manager.pass()).not.toThrow();
     expect(mockSend).not.toHaveBeenCalled();
+});
+
+// ===== G7 AC-1: netManager 单例 =====
+test('G7 AC-1: netManager 是 NetManager 模块级单例，两次 import 同一引用', () => {
+    const { netManager: nm2 } = require('../net/NetManager');
+    expect(netManager).toBe(nm2);
+});
+
+// ===== G1 AC-4/5/6: setToken =====
+test('G1 AC-4: setToken 将 token 写入 client.auth.token', () => {
+    const mockAuth: { token: string } = { token: '' };
+    const mockClientInst = { joinOrCreate: mockJoinOrCreate, auth: mockAuth };
+    (MockClient as jest.Mock).mockImplementationOnce(() => mockClientInst);
+    manager.init('ws://localhost:2567');
+    manager.setToken('jwt-abc');
+    expect(mockAuth.token).toBe('jwt-abc');
+});
+
+test('G1 AC-6: setToken(null) 静默忽略，不抛异常', () => {
+    manager.init('ws://localhost:2567');
+    expect(() => manager.setToken(null)).not.toThrow();
+});
+
+// ===== TASK-035 AC-4: init() 之前调用 setToken 不抛 TypeError =====
+test('TASK-035 AC-4: init() 之前调用 setToken(token) 静默忽略，不抛 TypeError', () => {
+    // manager 是 new NetManager()，init() 从未调用过，this.client === null
+    // 当前实现：this.client.auth.token = token → TypeError
+    expect(() => manager.setToken('valid-jwt-token')).not.toThrow();
+});
+
+test('G1 AC-6: setToken(undefined) 静默忽略，不抛异常', () => {
+    manager.init('ws://localhost:2567');
+    expect(() => manager.setToken(undefined)).not.toThrow();
 });

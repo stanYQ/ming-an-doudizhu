@@ -17,9 +17,29 @@
  * @module client/tests
  */
 
+import * as http from 'http';
 import { Client } from 'colyseus.js';
 
 const SERVER_URL = process.env.COLYSEUS_URL ?? 'ws://localhost:2567';
+
+// 绕过 http_proxy 环境变量：直接用 Node 原生 http 模块
+function httpPost(hostname: string, port: number, path: string, body: object): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify(body);
+    const req = http.request(
+      { hostname, port, path, method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) } },
+      (res) => {
+        let raw = '';
+        res.on('data', (chunk: string) => { raw += chunk; });
+        res.on('end', () => { try { resolve(JSON.parse(raw)); } catch (e) { reject(e); } });
+      },
+    );
+    req.on('error', reject);
+    req.write(data);
+    req.end();
+  });
+}
 
 /* ── 消息收集器 ──────────────────────────────────────────────────────────────
  * push()     : 新消息入队；若有等待方则立即交付
@@ -76,13 +96,34 @@ const flow = {
 describe('TASK-032c: GameFlow 集成冒烟（join→deal→landlord→doubling→play→settle→rematch）', () => {
 
   beforeAll(async () => {
-    // ── 1. 连接（5 s 超时；失败则跳过所有断言）──────────────────────────
-    const client = new Client(SERVER_URL);
-    let room: any;
+    // ── 1. 登录拿 JWT（AUTH_MODE=stub：任意 code 均合法）───────────────
+    const parsed   = new URL(SERVER_URL.replace(/^ws/, 'http'));
+    const hostname = parsed.hostname;
+    const port     = Number(parsed.port) || 2567;
+    let token: string;
     let connectTimer: any;
     try {
+      const body = await Promise.race([
+        httpPost(hostname, port, '/auth/login', { code: 'integration_test_player' }),
+        new Promise<never>((_, rej) => {
+          connectTimer = setTimeout(() => rej(new Error('connect_timeout')), 5_000);
+        }),
+      ]) as { token: string };
+      clearTimeout(connectTimer);
+      token = body.token;
+    } catch (e) {
+      clearTimeout(connectTimer);
+      console.warn(`[032c] 服务端不可达，跳过集成断言（${(e as Error).message}）`);
+      return;
+    }
+
+    // ── 2. 连接 Colyseus（持 JWT）────────────────────────────────────────
+    const client = new Client(SERVER_URL);
+    client.auth.token = token;
+    let room: any;
+    try {
       room = await Promise.race([
-        client.joinOrCreate('game', { mode: 'quick' }),
+        client.joinOrCreate('game', { aiFillEnabled: true }),
         new Promise<never>((_, rej) => {
           connectTimer = setTimeout(() => rej(new Error('connect_timeout')), 5_000);
         }),
@@ -90,7 +131,7 @@ describe('TASK-032c: GameFlow 集成冒烟（join→deal→landlord→doubling�
       clearTimeout(connectTimer);
     } catch (e) {
       clearTimeout(connectTimer);
-      console.warn(`[032c] 服务端不可达，跳过集成断言（${(e as Error).message}）`);
+      console.warn(`[032c] 房间连接失败，跳过集成断言（${(e as Error).message}）`);
       return;
     }
     serverAvailable = true;
@@ -167,11 +208,8 @@ describe('TASK-032c: GameFlow 集成冒烟（join→deal→landlord→doubling�
 
     // ── 5. 叫地主：检测是否收到 bottom_cards（仅地主收到）────────────────
     // bottom_cards 在 your_hand 之后立即发出（同一 startDealing 调用），
-    // 若 2 s 内未收到则确认我们不是地主。
-    const maybBottom: any = await Promise.race([
-      q.waitFor('bottom_cards', 2_000),
-      new Promise<null>(res => setTimeout(() => res(null), 2_000)),
-    ]);
+    // 若 2 s 内未收到（waitFor reject）则 .catch 转 null，确认我们不是地主。
+    const maybBottom: any = await q.waitFor('bottom_cards', 2_000).catch(() => null);
     if (maybBottom !== null) {
       flow.isLandlord  = true;
       flow.bottomCards = (maybBottom as any).cards as number[];

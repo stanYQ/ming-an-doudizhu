@@ -4,9 +4,8 @@ module.exports = {
   rootDir: '.',
   roots: ['<rootDir>/tests'],
   testMatch: ['<rootDir>/tests/__tests__/**/*.test.ts'],
-  // 集成测试需要真实服务端；默认跑 npm test 时排除，
+  // 集成测试依赖真实服务端；无服务端时 serverAvailable=false，所有断言自动跳过。
   // 单独执行：npm test -- --testPathPattern=integration --forceExit
-  testPathIgnorePatterns: ['\\.integration\\.test\\.ts$'],
   moduleNameMapper: {
     // Cocos Creator runtime modules → mocks
     '^cc$':      '<rootDir>/tests/__mocks__/cc.ts',

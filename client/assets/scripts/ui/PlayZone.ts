@@ -84,4 +84,10 @@ export class PlayZone {
 
   /** 返回当前倒计时截止时间戳。 */
   getDeadline(): number { return this._deadline; }
+
+  /**
+   * 展示出牌提示高亮（空实现，UI 高亮由后续任务完成）。
+   * @param _cards AI 推荐出牌编码数组
+   */
+  showHint(_cards: number[]): void {}
 }

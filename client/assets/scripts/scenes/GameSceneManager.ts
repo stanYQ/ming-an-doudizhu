@@ -9,7 +9,7 @@ import {
     _decorator, Component, Label, Button, Node, director,
 } from 'cc';
 import { GameController } from '../game/GameController';
-import { NetManager } from '../net/NetManager';
+import { netManager } from '../net/NetManager';
 import { HandCardView } from '../ui/HandCardView';
 import { PlayZone } from '../ui/PlayZone';
 import { PlayerSeat } from '../ui/PlayerSeat';
@@ -18,8 +18,6 @@ import { SettlementView } from '../ui/SettlementView';
 import { DoublingView } from '../ui/DoublingView';
 
 const { ccclass, property } = _decorator;
-
-const API_ENDPOINT = 'ws://localhost:2567';
 
 @ccclass('GameSceneManager')
 export class GameSceneManager extends Component {
@@ -60,11 +58,9 @@ export class GameSceneManager extends Component {
     @property(Button) doublingDoubleBtn!: Button;
     @property(Label)  doublingResultLabel!: Label;
 
-    private _net = new NetManager();
+    private _net = netManager;
 
     onLoad() {
-        this._net.init(API_ENDPOINT);
-
         const handCardView   = this._buildHandCardView();
         const playZone       = this._buildPlayZone();
         const seats          = this._buildSeats();
@@ -79,6 +75,15 @@ export class GameSceneManager extends Component {
         this.gameController.settlementView   = settlementView;
         this.gameController.doublingView     = doublingView;
         this.gameController.netManager       = this._net;
+
+        // init() 仅在 HallScene 调用一次；此处直接复用已建立的 room 连接
+        const room = this._net.room;
+        if (room) {
+            const mySessionId = room.sessionId as string;
+            const myPlayer    = (room.state?.players as any)?.get?.(mySessionId);
+            const mySeatIndex = (myPlayer?.seatIndex as number) ?? -1;
+            this.gameController.setConnected(mySeatIndex, mySessionId);
+        }
     }
 
     // ── 构建各逻辑实例 ────────────────────────────────────────────────────────
@@ -130,7 +135,7 @@ export class GameSceneManager extends Component {
         v._confirmBtn = this.confirmCodeBtn;
         v._rootNode   = this.codeSelectorRoot;
         v.onConfirm   = (choice: CodeCardChoice) => {
-            this.gameController.onCodeCardSelect(String(choice.suit), choice.rank);
+            this.gameController.onCodeCardSelect(choice.suit, choice.rank);
         };
         return v;
     }

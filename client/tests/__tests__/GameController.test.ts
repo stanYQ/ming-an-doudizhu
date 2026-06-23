@@ -32,6 +32,7 @@ function makeUIMocks() {
             startCountdown: jest.fn(),
             showLastPlay: jest.fn(),
             showError: jest.fn(),
+            clearLastPlay: jest.fn(),
         },
         playerSeats: [
             { showIdentity: jest.fn() },
@@ -41,7 +42,7 @@ function makeUIMocks() {
             { showIdentity: jest.fn() },
         ],
         codeCardSelector: { show: jest.fn() },
-        settlementView:   { show: jest.fn(), showResult: jest.fn() },
+        settlementView:   { show: jest.fn(), showResult: jest.fn(), hide: jest.fn() },
         doublingView: {
             _mySeatIndex: -1,
             _onSetDouble: jest.fn(),
@@ -108,21 +109,21 @@ test('AC-3: STATE dealing → DEALING + 发牌动画', () => {
 test('AC-4a: STATE landlord_select → LANDLORD_SELECT', () => {
     const { ctrl } = makeController();
     ctrl.setConnected(0, 'session-xyz');
-    emit('STATE', { phase: 'landlord_select', landlordSessionId: 'other' });
+    emit('STATE', { phase: 'landlord_select', landlordSeat: 3 });
     expect(ctrl.getState()).toBe('LANDLORD_SELECT');
 });
 
-test('AC-4b: 本人是地主 → codeCardSelector.show()', () => {
+test('AC-4b: 本人 seatIndex 与 landlordSeat 相同 → codeCardSelector.show()', () => {
     const { ctrl, ui } = makeController();
-    ctrl.setConnected(0, 'session-landlord');
-    emit('STATE', { phase: 'landlord_select', landlordSessionId: 'session-landlord' });
+    ctrl.setConnected(2, 'session-landlord');
+    emit('STATE', { phase: 'landlord_select', landlordSeat: 2 });
     expect(ui.codeCardSelector.show).toHaveBeenCalled();
 });
 
-test('AC-4c: 本人不是地主 → codeCardSelector 不触发', () => {
+test('AC-4c: 本人 seatIndex 与 landlordSeat 不同 → codeCardSelector 不触发', () => {
     const { ctrl, ui } = makeController();
     ctrl.setConnected(1, 'session-farmer');
-    emit('STATE', { phase: 'landlord_select', landlordSessionId: 'session-landlord' });
+    emit('STATE', { phase: 'landlord_select', landlordSeat: 3 });
     expect(ui.codeCardSelector.show).not.toHaveBeenCalled();
 });
 
@@ -229,11 +230,17 @@ test('AC-8b: TURN 非本人回合 → 按钮禁用', () => {
     expect(ui.playZone.startCountdown).not.toHaveBeenCalled();
 });
 
-// ===== AC-9: PLAY → playZone.showLastPlay =====
-test('AC-9: PLAY 事件 → playZone.showLastPlay(playerId, cards)', () => {
+// ===== G2 AC-8: Schema delta lastPlay → playZone.showLastPlay =====
+test('G2 AC-8: STATE playing + lastPlay 非空 → playZone.showLastPlay(lastPlayerId, lastPlay)', () => {
     const { ui } = makeController();
-    emit('PLAY', { playerId: 'p1', cards: [10, 11] });
+    emit('STATE', { phase: 'playing', lastPlay: [10, 11], lastPlayerId: 'p1' });
     expect(ui.playZone.showLastPlay).toHaveBeenCalledWith('p1', [10, 11]);
+});
+
+test('G2 AC-8: STATE playing + lastPlay 为空 → showLastPlay 不触发', () => {
+    const { ui } = makeController();
+    emit('STATE', { phase: 'playing', lastPlay: [], lastPlayerId: '' });
+    expect(ui.playZone.showLastPlay).not.toHaveBeenCalled();
 });
 
 // ===== AC-10: REVEAL → playerSeat.showIdentity =====
@@ -315,31 +322,48 @@ test('AC-18: 非本人回合时出牌/不要静默忽略', () => {
 });
 
 // ===== AC-19: 地主提交暗号牌 =====
-test('AC-19: onCodeCardSelect → netManager.selectCodeCard(suit, value)', () => {
+test('AC-19: onCodeCardSelect → netManager.selectCodeCard(suit: number, value)', () => {
     const { ctrl, ui } = makeController();
-    ctrl.setConnected(0, 'me');
-    emit('STATE', { phase: 'landlord_select', landlordSessionId: 'me' });
-    ctrl.onCodeCardSelect('heart', 3);
-    expect(ui.netManager.selectCodeCard).toHaveBeenCalledWith('heart', 3);
+    ctrl.setConnected(2, 'me');
+    emit('STATE', { phase: 'landlord_select', landlordSeat: 2 });
+    ctrl.onCodeCardSelect(1, 3);
+    expect(ui.netManager.selectCodeCard).toHaveBeenCalledWith(1, 3);
 });
 
 // ===== AC-20: 非法暗号牌点数过滤（J/Q/K/A/2/王） =====
 test('AC-20: 非法暗号牌点数 → 不调用 selectCodeCard', () => {
     const { ctrl, ui } = makeController();
-    ctrl.setConnected(0, 'me');
-    emit('STATE', { phase: 'landlord_select', landlordSessionId: 'me' });
+    ctrl.setConnected(2, 'me');
+    emit('STATE', { phase: 'landlord_select', landlordSeat: 2 });
     // J=11, Q=12, K=13, A=14, 2=15, 王=16/17
     for (const v of [11, 12, 13, 14, 15, 16, 17]) {
-        ctrl.onCodeCardSelect('spade', v);
+        ctrl.onCodeCardSelect(0, v);
     }
     expect(ui.netManager.selectCodeCard).not.toHaveBeenCalled();
+});
+
+// ===== G5 AC-14/15/16: BOTTOM_CARDS → handCardView.showBottomCards =====
+test('G5 AC-16: BOTTOM_CARDS 事件 → handCardView.showBottomCards(cards)', () => {
+    const { ui } = makeController();
+    ui.handCardView.showBottomCards = jest.fn();
+    emit('BOTTOM_CARDS', { cards: [100, 101, 102] });
+    expect(ui.handCardView.showBottomCards).toHaveBeenCalledWith([100, 101, 102]);
+});
+
+// ===== G6 AC-17/18/19: HINT → playZone.showHint =====
+test('G6 AC-19: HINT 事件 → playZone.showHint(cards)', () => {
+    const { ui } = makeController();
+    ui.playZone.showHint = jest.fn();
+    emit('HINT', { cards: [5, 6, 7] });
+    expect(ui.playZone.showHint).toHaveBeenCalledWith([5, 6, 7]);
 });
 
 // ===== onDestroy 注销监听 =====
 test('onDestroy: 注销全部 oops.message 监听', () => {
     const { ctrl } = makeController();
     ctrl.onDestroy();
-    expect(mockOff).toHaveBeenCalledTimes(13); // +REMATCH_UPDATE/REMATCH_START/REMATCH_REDIRECT
+    // STATE/HAND/BOTTOM_CARDS/HINT/TURN/REVEAL/OVER/ERROR/DOUBLING_START/LANDLORD_DOUBLED/DOUBLING_RESULT/REMATCH_UPDATE/REMATCH_START/REMATCH_REDIRECT = 14
+    expect(mockOff).toHaveBeenCalledTimes(14);
 });
 
 // ===== TASK-031c: REMATCH 消息路由 =====
@@ -362,4 +386,60 @@ test('TASK-031c: REMATCH_REDIRECT → settlementView.onRematchRedirect', () => {
     ui.settlementView.onRematchRedirect = jest.fn();
     emit('REMATCH_REDIRECT', { action: 'requeue' });
     expect(ui.settlementView.onRematchRedirect).toHaveBeenCalledWith({ action: 'requeue' });
+});
+
+// ===== TASK-035: 状态机补全 / lastPlay 精确触发 =====
+
+// AC-8: STATE phase='doubling' → state=DOUBLING（UI 由 DOUBLING_START 消息处理，schema 无 timeout）
+test('TASK-035 AC-8: STATE doubling → state=DOUBLING，show() 不在此处调用', () => {
+    const { ctrl, ui } = makeController();
+    emit('STATE', { phase: 'doubling' });
+    expect(ctrl.getState()).toBe('DOUBLING');
+    expect(ui.doublingView.show).not.toHaveBeenCalled();
+});
+
+// AC-9: STATE phase='waiting' → IN_ROOM_WAIT + settlementView.hide()
+test('TASK-035 AC-9: STATE waiting → IN_ROOM_WAIT + settlementView.hide()', () => {
+    const { ctrl, ui } = makeController();
+    emit('STATE', { phase: 'settlement' });           // 先进入结算
+    emit('STATE', { phase: 'waiting' });              // 再来一局：服务端重置到 waiting
+    expect(ctrl.getState()).toBe('IN_ROOM_WAIT');
+    expect(ui.settlementView.hide).toHaveBeenCalled();
+});
+
+// AC-10: showLastPlay 仅在 lastPlay 内容变化时触发，相同内容的 STATE delta 不重复调用
+test('TASK-035 AC-10: lastPlay 内容未变时 showLastPlay 不重复调用', () => {
+    const { ctrl, ui } = makeController();
+    // 第一次出牌
+    emit('STATE', { phase: 'playing', lastPlay: [10, 11, 12], lastPlayerId: 'A' });
+    expect(ui.playZone.showLastPlay).toHaveBeenCalledTimes(1);
+    // turn_change：同一个 lastPlay，仅 handCount 等变化触发的 delta
+    emit('STATE', { phase: 'playing', lastPlay: [10, 11, 12], lastPlayerId: 'A' });
+    expect(ui.playZone.showLastPlay).toHaveBeenCalledTimes(1); // 不重复调用
+    // 第二次出牌：lastPlay 真正变化
+    emit('STATE', { phase: 'playing', lastPlay: [20], lastPlayerId: 'B' });
+    expect(ui.playZone.showLastPlay).toHaveBeenCalledTimes(2);
+});
+
+// AC-11: lastPlay 清空（新一轮自由出牌）时调用 playZone.clearLastPlay()
+test('TASK-035 AC-11: lastPlay 清空时调用 playZone.clearLastPlay()', () => {
+    const { ctrl, ui } = makeController();
+    emit('STATE', { phase: 'playing', lastPlay: [5, 6, 7], lastPlayerId: 'A' });
+    // 三人依次 pass 后服务端清空 lastPlay
+    emit('STATE', { phase: 'playing', lastPlay: [], lastPlayerId: '' });
+    expect(ui.playZone.clearLastPlay).toHaveBeenCalled();
+    expect(ui.playZone.showLastPlay).toHaveBeenCalledTimes(1); // 仍只调用过一次
+});
+
+// P1-coverage: case 'dealing' 重置 _lastPlaySnapshot，防止再来一局首次同款出牌不触发
+test('P1-coverage: case dealing 重置 lastPlay 快照，再来一局同款出牌仍触发 showLastPlay', () => {
+    const { ctrl, ui } = makeController();
+    // 第一局出牌 [10]
+    emit('STATE', { phase: 'playing', lastPlay: [10], lastPlayerId: 'A' });
+    expect(ui.playZone.showLastPlay).toHaveBeenCalledTimes(1);
+    // 再来一局进入发牌阶段（snapshot 应被清零）
+    emit('STATE', { phase: 'dealing' });
+    // 新一局首次出牌与上局相同 [10]，snapshot 已清零故应再次触发
+    emit('STATE', { phase: 'playing', lastPlay: [10], lastPlayerId: 'B' });
+    expect(ui.playZone.showLastPlay).toHaveBeenCalledTimes(2);
 });

@@ -11,7 +11,7 @@ import {
 import { message } from 'db://oops-framework/core/common/event/MessageManager';
 import { HallView, HallPlayerInfo } from '../ui/HallView';
 import { MatchView } from '../ui/MatchView';
-import { NetManager } from '../net/NetManager';
+import { netManager } from '../net/NetManager';
 
 const { ccclass, property } = _decorator;
 
@@ -55,11 +55,12 @@ export class HallSceneManager extends Component {
     @property(Button) createRoomBtn!: Button;
     @property(Button) joinRoomBtn!: Button;
 
-    private _net = new NetManager();
+    private _net = netManager;
     private _matchView!: MatchView;
 
     onLoad() {
         this._net.init(API_ENDPOINT);
+        this._net.setToken(sys.localStorage.getItem('ddz_token'));
 
         const matchView = this._buildMatchView();
         const hallView  = this._buildHallView(matchView);

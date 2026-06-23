@@ -82,6 +82,12 @@ export class HandCardView {
     this._interactable = enabled;
   }
 
+  /**
+   * 接收地主底牌并展示（仅地主调用）。空实现，UI 渲染由后续任务完成。
+   * @param _cards 底牌编码数组，长度 3
+   */
+  showBottomCards(_cards: number[]): void {}
+
   // 根据当前选牌实时更新出牌按钮可用状态和牌型文字提示
   private _updatePatternUI(): void {
     const sel = this.getSelectedCards();

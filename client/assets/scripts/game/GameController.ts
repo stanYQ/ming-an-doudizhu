@@ -31,6 +31,7 @@ export class GameController extends Component {
     private currentSeat: number = -1;
     private mySeatIndex: number = -1;
     private mySessionId: string = '';
+    private _lastPlaySnapshot: number[] = [];
 
     // UI 组件引用（由场景装配脚本注入，不在编辑器里拖拽）
     handCardView:     any = null;
@@ -44,8 +45,9 @@ export class GameController extends Component {
     onLoad() {
         message.on('STATE',            this.onStateChange,      this);
         message.on('HAND',             this.onHand,             this);
+        message.on('BOTTOM_CARDS',     this.onBottomCards,      this);
+        message.on('HINT',             this.onHint,             this);
         message.on('TURN',             this.onTurn,             this);
-        message.on('PLAY',             this.onPlay,             this);
         message.on('REVEAL',           this.onReveal,           this);
         message.on('OVER',             this.onOver,             this);
         message.on('ERROR',            this.onError,            this);
@@ -60,8 +62,9 @@ export class GameController extends Component {
     onDestroy() {
         message.off('STATE',            this.onStateChange,      this);
         message.off('HAND',             this.onHand,             this);
+        message.off('BOTTOM_CARDS',     this.onBottomCards,      this);
+        message.off('HINT',             this.onHint,             this);
         message.off('TURN',             this.onTurn,             this);
-        message.off('PLAY',             this.onPlay,             this);
         message.off('REVEAL',           this.onReveal,           this);
         message.off('OVER',             this.onOver,             this);
         message.off('ERROR',            this.onError,            this);
@@ -95,29 +98,55 @@ export class GameController extends Component {
 
     private onStateChange(_event: string, state: any) {
         switch (state.phase) {
-            // 收到 dealing → 进入发牌阶段，触发发牌动画
+            // 收到 dealing → 进入发牌阶段，触发发牌动画；重置出牌快照防跨局误判
             case 'dealing':
                 this.state = ClientGameState.DEALING;
+                this._lastPlaySnapshot = [];
                 this.handCardView?.showDealAnimation?.();
                 break;
-            // 收到 landlord_select → 若本人是地主则弹出暗号牌选择器
+            // 收到 landlord_select → 若本人座位号与地主座位号匹配则弹出暗号牌选择器
+            // 使用 state.landlordSeat（number）而非 landlordSessionId（Schema 中无此字段）
             case 'landlord_select':
                 this.state = ClientGameState.LANDLORD_SELECT;
-                if (state.landlordSessionId === this.mySessionId) {
+                if (state.landlordSeat === this.mySeatIndex) {
                     this.codeCardSelector?.show();
                 }
+                break;
+            // 收到 doubling → 仅切换状态机；加倍 UI 由 DOUBLING_START 消息处理器负责
+            // schema 不含 timeout，不在此处调用 doublingView.show()
+            case 'doubling':
+                this.state = ClientGameState.DOUBLING;
                 break;
             // 收到 playing → 进入出牌阶段，激活出牌区交互；若仍在加倍面板则关闭
             case 'playing':
                 this.state = ClientGameState.PLAYING;
                 this.doublingView?.hide();
                 this.playZone?.setInteractable(true);
+                // Schema delta：仅在 lastPlay 内容实际变化时更新 UI，避免每次 delta 都触发
+                if (state.lastPlay?.length) {
+                    const current = [...state.lastPlay] as number[];
+                    const same = current.length === this._lastPlaySnapshot.length &&
+                                 current.every((v, i) => v === this._lastPlaySnapshot[i]);
+                    if (!same) {
+                        this._lastPlaySnapshot = current;
+                        this.playZone?.showLastPlay(state.lastPlayerId ?? '', current);
+                    }
+                } else if (this._lastPlaySnapshot.length > 0) {
+                    // 新一轮自由出牌：服务端清空 lastPlay，清除上一轮出牌展示
+                    this._lastPlaySnapshot = [];
+                    this.playZone?.clearLastPlay?.();
+                }
                 break;
             // 收到 settlement → 禁用交互，展示结算界面
             case 'settlement':
                 this.state = ClientGameState.SETTLEMENT;
                 this.playZone?.setInteractable(false);
                 this.settlementView?.show();
+                break;
+            // 收到 waiting → 再来一局重置回等待状态，隐藏结算界面
+            case 'waiting':
+                this.state = ClientGameState.IN_ROOM_WAIT;
+                this.settlementView?.hide?.();
                 break;
         }
     }
@@ -136,8 +165,12 @@ export class GameController extends Component {
         if (isMyTurn) this.playZone?.startCountdown(msg.deadline);
     }
 
-    private onPlay(_event: string, msg: { playerId: string; cards: number[] }) {
-        this.playZone?.showLastPlay(msg.playerId, msg.cards);
+    private onBottomCards(_event: string, msg: { cards: number[] }) {
+        this.handCardView?.showBottomCards?.(msg.cards);
+    }
+
+    private onHint(_event: string, msg: { cards: number[] }) {
+        this.playZone?.showHint?.(msg.cards);
     }
 
     private onReveal(_event: string, msg: { playerId: string; role: string }) {
@@ -221,10 +254,10 @@ export class GameController extends Component {
 
     /**
      * 地主确认暗号牌后由 CodeCardSelector.onConfirm 回调触发。
-     * @param suit 花色字符串（由 CodeCardSelector 转换）
+     * @param suit 花色编码 0=♠ 1=♥ 2=♦ 3=♣
      * @param value rank 编码，0=3 … 7=10；非法值静默丢弃
      */
-    onCodeCardSelect(suit: string, value: number) {
+    onCodeCardSelect(suit: number, value: number) {
         if (!VALID_CODE_CARD_VALUES.has(value)) return;
         this.netManager?.selectCodeCard(suit, value);
     }

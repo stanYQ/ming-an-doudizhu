@@ -26,6 +26,16 @@ export class NetManager {
     }
 
     /**
+     * 将 JWT 写入 Colyseus client.auth.token，之后每次 joinRoom 自动携带 Authorization 头。
+     * token 为 null/undefined 时静默忽略，不影响 stub 模式下无 token 的测试流程。
+     * @param token 登录接口返回的 JWT
+     */
+    setToken(token: string | null | undefined): void {
+        if (!token || !this.client) return;
+        this.client.auth.token = token;
+    }
+
+    /**
      * 加入或创建指定房间，并注册所有服务端消息处理器。
      * @param name 房间名称，对应服务端 gameServer.define(name, ...)
      * @param options 加入参数（token、mode、roomCode 等）
@@ -39,11 +49,12 @@ export class NetManager {
     private _registerHandlers() {
         const r = this.room!;
         r.onMessage('your_hand',       (msg: any) => message.dispatchEvent('HAND',            msg));
-        r.onMessage('identity_reveal',  (msg: any) => message.dispatchEvent('REVEAL',          msg));
-        r.onMessage('game_over',        (msg: any) => message.dispatchEvent('OVER',            msg));
-        r.onMessage('turn_change',      (msg: any) => message.dispatchEvent('TURN',            msg));
-        r.onMessage('play_broadcast',   (msg: any) => message.dispatchEvent('PLAY',            msg));
-        r.onMessage('error',            (msg: any) => message.dispatchEvent('ERROR',           msg));
+        r.onMessage('bottom_cards',    (msg: any) => message.dispatchEvent('BOTTOM_CARDS',    msg));
+        r.onMessage('hint',            (msg: any) => message.dispatchEvent('HINT',            msg));
+        r.onMessage('identity_reveal', (msg: any) => message.dispatchEvent('REVEAL',          msg));
+        r.onMessage('game_over',       (msg: any) => message.dispatchEvent('OVER',            msg));
+        r.onMessage('turn_change',     (msg: any) => message.dispatchEvent('TURN',            msg));
+        r.onMessage('error',           (msg: any) => message.dispatchEvent('ERROR',           msg));
         r.onMessage('doubling_start',   (msg: any) => message.dispatchEvent('DOUBLING_START',   msg));
         r.onMessage('landlord_doubled', (msg: any) => message.dispatchEvent('LANDLORD_DOUBLED', msg));
         r.onMessage('doubling_result',  (msg: any) => message.dispatchEvent('DOUBLING_RESULT',  msg));
@@ -71,10 +82,10 @@ export class NetManager {
 
     /**
      * 发送暗号牌选择（仅地主在 landlord_select 阶段调用）。
-     * @param suit 花色字符串
+     * @param suit 花色编码 0=♠ 1=♥ 2=♦ 3=♣
      * @param value rank 编码，0=3 … 7=10
      */
-    selectCodeCard(suit: string, value: number): void {
+    selectCodeCard(suit: number, value: number): void {
         this.room?.send('select_code_card', { suit, value });
     }
 
@@ -115,3 +126,6 @@ export class NetManager {
         this.room = null;
     }
 }
+
+/** 跨场景共享单例：HallScene 建立连接，GameScene 直接复用同一 room 引用。 */
+export const netManager = new NetManager();
