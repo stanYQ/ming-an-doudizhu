@@ -10,6 +10,8 @@
 
 ## 已完成
 
+- [x] TASK-046 [server] game_over 消息增强：players[] + breakdown | 完成: server-dev | 测试: ✓ 405/405（+8 AC-1~5）| 产物: server/src/rooms/CardRoom.ts, server/src/__tests__/CardRoom.test.ts, docs/PROTOCOL.md
+
 - [x] TASK-036 [client] P1 协议全覆盖冒烟（27 AC）| 完成: client-dev | 测试: ✓ 36/36（standalone）| 产物: client/tests/__tests__/ProtocolCoverage.integration.test.ts
   - 修复: makeMsgQueue.waitFor 超时未移除 stale waiter（ISSUE-C013）
   - 协同: server-dev TASK-040（ISSUE-S007）+ AI 异步延迟（ISSUE-C014，AI_FILL_DELAY=1）

@@ -10,7 +10,6 @@
 
 ## 当前进行中
 
-- [ ] TASK-046 [server] game_over 消息增强：players[] + breakdown，供结算 UI 渲染 | 认领: server-dev | 开始: 2026-06-25
 
 
 
