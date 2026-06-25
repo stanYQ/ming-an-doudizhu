@@ -123,13 +123,14 @@ export class GameController extends Component {
                 this.doublingView?.hide();
                 this.playZone?.setInteractable(true);
                 // Schema delta：仅在 lastPlay 内容实际变化时更新 UI，避免每次 delta 都触发
+                // 先比较再复制，避免在无变化的高频 delta 上分配新数组（微信小程序 GC 敏感）
                 if (state.lastPlay?.length) {
-                    const current = [...state.lastPlay] as number[];
-                    const same = current.length === this._lastPlaySnapshot.length &&
-                                 current.every((v, i) => v === this._lastPlaySnapshot[i]);
+                    const incoming = state.lastPlay as number[];
+                    const same = incoming.length === this._lastPlaySnapshot.length &&
+                                 incoming.every((v, i) => v === this._lastPlaySnapshot[i]);
                     if (!same) {
-                        this._lastPlaySnapshot = current;
-                        this.playZone?.showLastPlay(state.lastPlayerId ?? '', current);
+                        this._lastPlaySnapshot = [...incoming];
+                        this.playZone?.showLastPlay(state.lastPlayerId ?? '', this._lastPlaySnapshot);
                     }
                 } else if (this._lastPlaySnapshot.length > 0) {
                     // 新一轮自由出牌：服务端清空 lastPlay，清除上一轮出牌展示
@@ -157,11 +158,12 @@ export class GameController extends Component {
         this.handCardView?.render(msg.cards);
     }
 
-    private onTurn(_event: string, msg: { seatIndex: number; deadline: number }) {
+    private onTurn(_event: string, msg: { seatIndex: number; deadline: number; isNewRound?: boolean }) {
         this.currentSeat = msg.seatIndex;
         const isMyTurn   = this.currentSeat === this.mySeatIndex;
         this.playZone?.setPlayButtonEnabled(isMyTurn);
-        this.playZone?.setPassButtonEnabled(isMyTurn);
+        // 自由轮（isNewRound=true）不允许 pass
+        this.playZone?.setPassButtonEnabled(isMyTurn && !msg.isNewRound);
         if (isMyTurn) this.playZone?.startCountdown(msg.deadline);
     }
 

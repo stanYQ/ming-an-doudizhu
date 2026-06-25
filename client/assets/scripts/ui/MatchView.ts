@@ -75,15 +75,11 @@ export class MatchView {
    * 注意：成功加入房间后等待服务端 player_count 推送，凑满5人后 updatePlayerCount 自动跳转。
    */
   async showQuickMatch(): Promise<void> {
-    if (this._joining) return;
-    this._joining = true;
-    try {
+    await this._withJoining(async () => {
       this._reset();
       this._rootNode.active = true;
       await this._joinRoom('game', { mode: 'quick' });
-    } finally {
-      this._joining = false;
-    }
+    });
   }
 
   /**
@@ -152,17 +148,13 @@ export class MatchView {
    * 创建好友房并展示房间码（供房主复制分享）。
    */
   async onCreateRoomClick(): Promise<void> {
-    if (this._joining) return;
-    this._joining = true;
-    try {
+    await this._withJoining(async () => {
       const result = await this._joinRoom('game', { mode: 'friend' });
       this._roomCode                   = result.roomCode ?? '';
       this._roomCodeLabel.string       = this._roomCode;
       this._roomCodeLabel.node.active  = true;
       this._copyBtn.node.active        = true;
-    } finally {
-      this._joining = false;
-    }
+    });
   }
 
   /** 复制房间码到剪贴板（无房间码时静默忽略）。 */
@@ -251,6 +243,12 @@ export class MatchView {
     } catch {
       // AC-16: 分享失败（用户取消或 API 不支持）静默处理
     }
+  }
+
+  private async _withJoining(fn: () => Promise<void>): Promise<void> {
+    if (this._joining) return;
+    this._joining = true;
+    try { await fn(); } finally { this._joining = false; }
   }
 
   private _reset(): void {

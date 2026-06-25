@@ -14,12 +14,13 @@ module.exports = {
     // 源码相对路径映射（test 文件里的 ../ui/X → assets/scripts/ui/X）
     '^\\.\\./(ui|game|net|shared|core|scenes)/(.*)$': '<rootDir>/assets/scripts/$1/$2',
   },
-  globals: {
-    'ts-jest': {
+  globalTeardown: '<rootDir>/tests/teardown.js',
+  transform: {
+    '^.+\\.tsx?$': ['ts-jest', {
       tsconfig: {
         strict: true,
         esModuleInterop: true,
       },
-    },
+    }],
   },
 };
