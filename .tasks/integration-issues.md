@@ -1,16 +1,15 @@
 # Integration Issues
 
-> TASK-032c 冒烟测试期间，client-dev 遇到任何问题写这里。
 > PM 每日查看，决策处理方式（修 bug / 改 spec / 更新协议）。
 
 ## 格式
 
 ```
 - [ ] ISSUE-{id} [{严重度}] {一句话描述}
-  - 复现步骤: {AC-? 阶段，做了什么}
-  - 期望行为: {按 PROTOCOL.md 应该发生什么}
-  - 实际行为: {实际发生了什么，附错误信息}
-  - 报告人: client-dev | 日期: {日期}
+  - 复现步骤: ...
+  - 期望行为: ...
+  - 实际行为: ...
+  - 报告人: | 日期:
 ```
 
 严重度：🔴 阻塞（测试无法继续）/ 🟡 异常（行为不符合协议）/ 🟢 疑问（需要 PM 澄清）
@@ -19,123 +18,154 @@
 
 ## 待处理
 
-- [ ] ISSUE-001 [🟡] CardRoom: `realPlayerCount` 在 settlement 阶段玩家离线时不递减，导致再来一局票数永远无法达标
-  - 复现步骤: 5人正常结束一局游戏，进入 settlement 阶段后任意1名真实玩家断线，其余4人全部发送 `request_rematch`
-  - 期望行为: 按在线人数计算阈值，4/4 应触发 `doRematch`
-  - 实际行为: `total = this.realPlayerCount = 5`（未递减），`rematchAgreed.size(4) < 5`，再来一局永远不触发；30s 窗口期到期后房间强制 `disconnect`
-  - 根因: `onLeave`（CardRoom.ts:144）仅在 `phase === "waiting"` 时才递减 `realPlayerCount`，其他阶段跳过
+- [ ] ISSUE-S007 [🔴] GameFlow 完成后 Colyseus matchmaking 返回 503，后续所有 `create('game',...)` 立即失败，ProtocolCoverage AC-5~27 全部 skip
+  - **PM 决策（2026-06-24）**: 🔴 根因：realPlayerCount=0 后 AI fake clients 未从 this.clients 移除，Colyseus 视旧房间仍存活，新 create() 被拒 503。分配 server-dev TASK-040：onLeave 里 realPlayerCount=0 时清除所有 aiSessionIds fake client 并调用 disconnect()。client-dev 临时绕过：非出牌 AC（7~14、16~24）可先推进，每 suite 间加 3s delay。
+  - 复现步骤: ① `npm test -- --testPathPattern=GameFlow.integration --forceExit`（9/9 通过，62s）→ ② 立即运行 `npm test -- --testPathPattern=ProtocolCoverage.integration --forceExit` → AC-5~27 全部 503 skip；或直接 Node 脚本 `client.create('game', { aiFillEnabled: true })` 在 GameFlow 完成后立即失败
+  - 期望行为: 一局游戏完成并 `room.leave()` 后，服务端应立即能接受新的房间创建请求
+  - 实际行为: `client.create('game',...)` 返回 `{ name: "ServerError", code: 503 }`；HTTP auth（`/auth/login`）正常；仅 Colyseus matchmaking endpoint 失败
+  - 排查线索: ① GameFlow 结束后 AI fake client（4 个）是否仍挂在 Colyseus clients 列表中导致房间未释放；② rematch 窗口期（30s）是否与 dispose 逻辑冲突；③ TASK-039 改动后 `onCreate` / `onLeave` 是否有未捕获异常导致 matchmaking handler 崩溃；④ 服务端日志中 GameFlow leave 后是否有 `[ERROR]` 输出
+  - 影响: TASK-036 ProtocolCoverage AC-5~27（28 个 WS 测试用例）全部无法验证
+  - 报告人: client-dev 冒烟测试 | 日期: 2026-06-24
+
+- [ ] ISSUE-S004 [🔴] server 对 hint 推荐的单张牌（card=58，♠7 deck-1）在自由轮返回 1001 "invalid play"，GameFlow 9/9 全失败
+  - **PM 决策（2026-06-24）**: 🔴 server-dev 排查：① `PatternHelper.parse([58])` 单元测试确认是否返回 INVALID；② AIPlayer.decide 确认推荐的牌是否真实在手牌里。打包进 TASK-039。
+  - 复现步骤: `AI_FILL_DELAY=0 AUTH_MODE=stub` 启动服务端 → 运行 `npm test -- --testPathPattern=GameFlow.integration --forceExit`
+  - 错误现象: `turn_change(seat=0)` → `request_hint` → 收到 `hint.cards=[58]` → `play_cards { cards:[58] }` → server 返回 `error { code:1001, msg:"invalid play" }`
+  - 期望行为: card 58（♠7，deck-1 非王牌，58%54=4 不触发 isJoker）应被 PatternHelper.parse() 识别为 SINGLE，validatePlay 返回 ok
+  - 实际行为: server 返回 1001，客户端降级 pass → server 返回 1002（自由轮不可 pass）× 3 → fatal，9/9 全部失败
+  - 排查线索: ① PatternHelper.parse([58]) 是否在某些 JIT 路径返回 INVALID；② 是否存在 race condition 导致 handlePlay 收到 cards=[] 或 cards=[非法值]；③ server 运行时日志 [PLAY] / [AI] 有无出现
+  - 报告人: client-dev 冒烟测试 | 日期: 2026-06-24
+
+- [ ] ISSUE-S005 [🟡] `turn_change` 协议缺 `isNewRound` 字段 — 客户端在 Schema delta（≤50ms）到达前无法判断是否自由轮，导致发送无效 pass
+  - **PM 决策（2026-06-24）**: 采用协议补丁方案。server-dev 在 TASK-039 中：`turn_change` payload 加 `isNewRound: boolean` + 更新 PROTOCOL.md。client-dev 在 TASK-036 中：`turn_change` handler 用 `isNewRound` 控制 pass 状态，不等 Schema delta。
+  - 复现步骤: 4 人全 pass → lastPlay 清空 → server 立即广播 `turn_change` → 客户端收到 `turn_change` 但 Schema delta 尚未到达 → 客户端仍见旧 lastPlay（非空）→ 误判为可 pass → 发送 pass → server 1002
+  - 期望行为: 客户端收到 `turn_change` 时即可确定是否自由轮，不依赖 Schema delta 时序
+  - 实际行为: `turn_change` 仅含 `{ seatIndex, deadline }`；`lastPlay` 清空通过 Schema delta 下发，最多晚到 50ms（`DEFAULT_PATCH_RATE=1000/20`）；窗口期内客户端状态不一致，可能连续发出 N 次无效 pass
+  - 根因: Colyseus 的 `broadcast()` 与 `broadcastPatch()` 是两条独立通道，前者立即发送，后者定时发送；`startTurnTimer` 在 Schema 写入后立即调用 `broadcast("turn_change")`，导致协议消息先于 Schema delta 到达客户端
+  - 修复方向: `turn_change` payload 新增 `isNewRound: this.state.lastPlay.length === 0`；客户端优先用此字段判断 pass 按钮状态，不等 Schema delta（需同步更新 PROTOCOL.md）
+  - 报告人: server-dev 牌局日志分析 | 日期: 2026-06-24
+
+- [ ] ISSUE-S006 [🟢] TASK-037 引入回归：`[PASS]` 日志在 isNewRound 守卫前打印，被拒绝的无效 pass 也会出现在日志中
+  - **PM 决策（2026-06-24）**: 🟢 一行移动，打包进 TASK-039。
+  - 复现步骤: 自由轮时客户端发送 `pass` → 日志打印 `[PASS]` → isNewRound 守卫返回 error 1002；日志显示 pass 被执行，实际被拒绝
+  - 期望行为: `[PASS]` 只在 pass 真正通过守卫后打印（与 `[PLAY]` 对称）
+  - 实际行为: `CardRoom.ts handlePass` 中 `console.log("[PASS]...")` 在 isNewRound check 之前，每次拒绝都产生误导性日志
+  - 根因: TASK-037 实现时 log 位置放错，应在 `if (isNewRound) return` 之后
+  - 修复方向: 将 `console.log("[PASS]...")` 移到 isNewRound 守卫之后、`battlePlays.push()` 之前（一行移动）
+  - 报告人: server-dev 牌局日志分析 | 日期: 2026-06-24
+
+- [ ] ISSUE-C011 [🟡] GameFlow test 错误恢复策略：error 1001 后盲目 pass，自由轮下级联触发 1002 fatal
+  - **PM 决策（2026-06-24）**: 🟡 client-dev 在 TASK-036 期间处理。error 1001 后 `awaitingPlayResult=false`，不发 pass，等下一个 turn_change 重新驱动 hint 流程。
+  - 文件: `client/tests/__tests__/GameFlow.integration.test.ts:265`
+  - 复现步骤: server 对某次出牌返回 1001 → test error handler 执行 `room.send('pass')` → server 返回 1002（自由轮不可 pass）→ error handler 再 pass → 连续 >3 次 → fatal
+  - 期望行为: error 1001 后应等待下一个 turn_change 重新请求 hint，而非立即 pass
+  - 实际行为: 直接 pass，若为自由轮则必然 1002 级联
+  - 修复方向: error handler 收到 1001 后将 `awaitingPlayResult=false`、`recoverableErrorCount++`，**不发 pass**；等下一个 turn_change 重新驱动 hint 流程
+  - 报告人: client-dev 冒烟测试 | 日期: 2026-06-24
+
+- [ ] ISSUE-009 [🔴] CardRoom: rematch 窗口期到期 `disconnect()` 崩溃 — 客户端已离线时 `_forciblyCloseClient` 访问 `undefined.removeAllListeners()`
+  - 复现步骤: 5人打完一局到 `[FINISH]`，客户端调用 `.leave()` 离开，30s 后 `startRematchWindow` 定时器触发 `this.disconnect()`
+  - 期望行为: `disconnect()` 正常执行，房间销毁，无异常
+  - 实际行为: `CardRoom.ts:870` → `_forciblyCloseClient()` → `TypeError: Cannot read properties of undefined (reading 'removeAllListeners')`；触发两次（每个已离线客户端各一次）
+  - 根因: 客户端 `.leave()` 后 WebSocket 连接对象销毁，`_forciblyCloseClient` 未判断连接是否存活；`startRematchWindow` 未在 `onLeave` 时检查在线人数
+  - 修复方向: `onLeave` 中判断在线人数为 0 时提前 `clearTimeout(rematchWindow)`；或 `disconnect()` 前 guard `client.readyState`
+  - 报告人: server-dev 牌局日志分析 | 日期: 2026-06-24
+  - **PM 决策（2026-06-24）**: 🔴 优先修，影响 TASK-036 AC-10/11（rematch 重连测试）。分配给 server-dev，TASK-037 批次二一并处理。
+
+- [ ] ISSUE-010 [🟡] `handlePass` 无日志 — pass 行为在服务端日志不可见
+  - 实际行为: `[TURN] seat=0` 后直接出现 `[TURN] seat=1`，无法判断是 pass 还是静默异常
+  - 修复方向: `handlePass` 首行加 `console.log('[PASS] sid=%s seat=%d', client.sessionId, this.state.currentTurnSeat)`
+  - 报告人: server-dev 牌局日志分析 | 日期: 2026-06-24
+  - **PM 决策（2026-06-24）**: 🟡 一行修复，打包进 TASK-037。
+
+- [ ] ISSUE-003 [🟢] `src/index.ts` 和 `src/routes/authRoutes.ts` 缺少文件头 JSDoc（`@file @description @module`）
+  - 报告人: server-dev code-review | 日期: 2026-06-23
+  - **PM 决策（2026-06-24）**: 🟢 打包进 TASK-037。
+
+
+- [ ] ISSUE-002 [🟢] CardRoom `checkDoublingComplete` / `advanceTurn` 硬编码魔法数字 `5`，未引用 `seatMap.length`
+  - 验证结论: 当前逻辑正确，纯维护风险
   - 报告人: server-dev code-review | 日期: 2026-06-23
 
-- [ ] ISSUE-002 [🟢] CardRoom: `checkDoublingComplete`（line 396）和 `advanceTurn`（line 451）硬编码 `5`，未引用 `seatMap.length`
-  - 复现步骤: 当前 5 人固定局不触发（`maxClients=5` + `fillWithAI` 保证始终 5 人）
-  - 期望行为: 当前实现正确；若未来扩展非5人局则需修改
-  - 实际行为: 无现网 bug，纯维护风险
-  - 根因: 魔法数字 `5` 与 `this.seatMap.length` 语义等价但未引用后者
-  - 验证结论: PLAUSIBLE（未来扩展风险），当前逻辑正确，降级为 🟢
+- [ ] ISSUE-004 [🟢] `executeManagedAction` 与 `executeAIAction` 存在重复逻辑，维护成本双倍
+  - 修复方向: 提取公共 `playFallback(sessionId)` 函数
   - 报告人: server-dev code-review | 日期: 2026-06-23
 
-- [ ] ISSUE-003 [🟢] 注释规范违反（CLAUDE.md server 规定）：`src/index.ts` 和 `src/routes/authRoutes.ts` 缺少 `@file` / `@description` / `@module` 文件头 JSDoc
-  - 复现步骤: 查看 src/index.ts:1、src/routes/authRoutes.ts:1，均以 `import` 开头无文件头注释
-  - 期望行为: server/CLAUDE.md 规定"每个 .ts 文件必须有文件头，缺注释 = 未完成"
-  - 实际行为: 两个文件均无 `@file @description @module` 三行 JSDoc
-  - 报告人: server-dev code-review | 日期: 2026-06-23
+- [ ] ISSUE-C008 [🟢] `ClientGameState.IN_LOBBY` 声明后从未转换，dead state
+  - 文件: `GameController.ts:14`
+  - 报告人: client-dev code-review | 日期: 2026-06-23
 
-- [ ] ISSUE-004 [🟢] `executeManagedAction`（CardRoom.ts:503）与 `executeAIAction`（CardRoom.ts:720）存在重复逻辑：`isNewRound` 判断 + 最低单牌托底出牌，维护成本双倍
-  - 复现步骤: 代码阅读即可发现；修改其一逻辑时另一处易遗漏
-  - 期望行为: 提取公共 `playFallback(sessionId)` 函数
-  - 实际行为: 两处独立实现，任一修改不同步则行为分叉
-  - 报告人: server-dev code-review | 日期: 2026-06-23
+- [ ] ISSUE-C009 [🟢] `API_ENDPOINT` 在 `HallSceneManager.ts:18` 和 `GameSceneManager.ts:22` 重复声明
+  - 报告人: client-dev code-review | 日期: 2026-06-23
 
-- [ ] ISSUE-005 [🔴] `handlePass`（CardRoom.ts:300）未校验是否为自由出牌轮，客户端可在 `lastPlay` 为空时发送 `pass` 跳过出牌义务
-  - 复现步骤: playing 阶段，当 `state.lastPlay.length === 0`（或 `lastPlayerId === client.sessionId`）时，轮到该玩家，发送 `pass` 消息
-  - 期望行为: 服务端拒绝并返回 error { code: 1002 }；自由出牌轮不可 pass
-  - 实际行为: `handlePass` 只检查 phase 和 seatIndex，无自由轮判断；pass 被接受，`passCount++`，连续4次后错误清空 `lastPlay`，游戏状态被破坏
-  - 根因: CardRoom.ts:300 缺少 `if (this.state.lastPlay.length === 0 || this.state.lastPlayerId === client.sessionId) return;` 守卫
-  - 报告人: server-dev code-review | 日期: 2026-06-23
+- [x] ISSUE-C013 [🔴] ProtocolCoverage AC-18/19/20/22 方案A实施后仍全部 null — handleTurn 内部哪条分支未执行待确认
+  - **已解决（2026-06-25）**: 根因是 `makeMsgQueue.waitFor` 超时后未从 `pending` 移除旧 waiter。AC-24/AC-23 的 `waitFor('error', 1s)` 各自 timeout 但留下 stale waiter，后续真实 error 被消耗掉。修复：timeout 回调中先从 `pending` splice 移除自身再 reject。
 
-- [ ] ISSUE-006 [🔴] `landlord_select` 阶段无超时兜底：地主断线后游戏永久挂起
-  - 复现步骤: 5人到齐发牌，进入 `landlord_select` 阶段后地主断线，`allowReconnection(60)` 超时失败
-  - 期望行为: 超时后自动为地主选默认暗号牌（如 suit:0, value:0），游戏继续
-  - 实际行为: `onLeave` catch 块只调用 `managed.add(sessionId)`；`managed` 仅在 `handleTimeout` 中被消费，而 `landlord_select` 阶段无 `turnTimer`；60s 后游戏无任何触发机制，永久卡死
-  - 根因: `handleSelectCode`（CardRoom.ts:209）未设置超时定时器；`landlord_select` 阶段缺少断线处理路径
-  - 报告人: server-dev code-review | 日期: 2026-06-23
+- [ ] ISSUE-C014 [🔴] ProtocolCoverage AC-18 无法可靠触发 1003 — 服务端 AI 同步执行导致单客户端无窗口
+  - 复现: `AC-18` 在 `handleTurn(seatIndex !== mySeat)` 分支发 `play_cards`，服务端已在同一 JS tick 同步执行完所有 AI 回合，`currentTurnSeat` 回到 0；消息到达时被当作 seat=0 的合法操作处理，返回非 1003 的错误或静默接受
+  - 根因: `startTurnTimer` line 601-603 — AI `executeAIAction` 同步调用，无 setTimeout；5 条 `turn_change` 消息在同一 tick 全部入发送缓冲区；客户端收到 seat=1 的 turn_change 时服务端 `currentTurnSeat` 已经是 0
+  - 已排除方案: 
+    - 双发合法牌（方案A）：第二发到达时 turn 已回到 seat=0，得到 1004 不是 1003
+    - 非我方回合直接发：同上，服务端已同步完成
+  - 当前结果: `ec.ac18_error=null`（waitFor 3s 超时），AC-18 持续失败
+  - 需要 PM 决策（三选一）:
+    - **A**: `AI_FILL_DELAY=0` 改为 `AI_FILL_DELAY=1`（1ms setTimeout），给客户端一个窗口 — 改 server 启动脚本，不改逻辑
+    - **B**: 双客户端 — beforeAll 里建第二个连接，在第一个客户端回合时由第二个发 `play_cards` → 100% 1003；复杂度高
+    - **C**: AC-18 改为「条件性」— 能捕到 1003 则断言，捕不到则 warn+skip（与 AC-21 同级处理）
+  - 报告人: client-dev | 日期: 2026-06-25
 
-- [ ] ISSUE-007 [🟡] `handleReconnectSync`（CardRoom.ts:320）不处理 `landlord_select` 阶段：地主重连后无法得知需选暗号牌
-  - 复现步骤: 地主在 `landlord_select` 阶段短暂断线后重连（60s 内），服务端调用 `handleReconnectSync`
-  - 期望行为: 应补发 `your_hand` + `landlord_select_start`（含底牌信息），让客户端重新展示暗号牌选择弹窗
-  - 实际行为: `handleReconnectSync` 只处理 `doubling` 和 `playing` 两种阶段；地主仅收到 `your_hand`，客户端不知当前需要操作，UI 无响应
-  - 根因: CardRoom.ts:323-334 的 `if-else if` 链缺少 `phase === "landlord_select"` 分支
-  - 报告人: server-dev code-review | 日期: 2026-06-23
+- [ ] ISSUE-C013 [🔴] ProtocolCoverage AC-18/19/20/22 方案A实施后仍全部 null — handleTurn 内部哪条分支未执行待确认
+  - 复现: 方案A已实施（等我方回合→合法出牌→立刻再发→waitFor error 1003），`npm test -- --testPathPattern=ProtocolCoverage.integration --forceExit` → AC-18/19/20/22 仍 undefined
+  - 期望: AC-18: 1003 / AC-19: 1004 / AC-20: 1001 / AC-22: 1002
+  - 实际: 四者均 null（waitFor 3_000ms 超时）
+  - 已排除: 原竞态问题（handleTurn 现在顶部 guard `if (msg.seatIndex !== mySeat) return`，只在自己回合执行）
+  - 三个候选根因（无 debug 输出，无法确认哪个）：
+    - A: **hint18 为空**——AC-18 的 `if (cards18.length > 0)` 分支从未进入；hint18 可能在某种局面下返回 `cards:[]`，导致 test player 既不出牌也不 pass，整轮静默超时；需确认 `request_hint` 在自由轮 / 跟牌局面下是否可能返回空
+    - B: **isNewRound 字段缺失**——服务端运行实例未包含 TASK-039 的 turn_change 补丁，msg.isNewRound 始终 undefined → isNewRound=false，AC-22/AC-20（依赖 isNewRound=true）永远跳过；AC-18/19 不依赖此字段，若仍 null 说明同时存在 A 或 C
+    - C: **mySeat 解析错误**——waitForSeat 返回错误值，guard 过滤掉所有 turn_change，handleTurn 主体从未执行；需确认 `players.get(room.sessionId)` 在 Colyseus 0.15 MapSchema 中的行为
+  - 需要 PM/server-dev 确认:
+    1. 当前运行的服务端是否包含 TASK-039 的 `isNewRound` 补丁？（验证：服务端日志中 turn_change broadcast 是否带 isNewRound 字段）
+    2. `request_hint` 在跟牌局面（lastPlay 非空）且我方无法压过时，返回 `cards:[]` 还是仍然返回一个 fallback card？
+    3. 是否允许 client-dev 加一行 `console.log` debug 日志（带 mySeat 和 msg.seatIndex）确认 guard 行为，跑一次后立删？
+  - 报告人: client-dev | 日期: 2026-06-25
 
-- [ ] ISSUE-008 [🟢] `SettleService.settle` 注释（line 157）与实际行为相悖：注释称"事务失败后 CardRoom 不广播 game_over"，但 game_over 在 settle 调用前已广播
-  - 复现步骤: 阅读 CardRoom.ts:578-584：先 `broadcast("game_over", ...)` 再 `SettleService.settle(...).catch(...)`
-  - 期望行为: 注释应准确描述实际契约："settle 异步执行，失败仅打日志，不影响 game_over 投递"
-  - 实际行为: 注释声明的"失败→不广播"契约与代码实现完全相反，误导后续开发者
-  - 根因: TASK-022 实现时将 settle 改为 fire-and-forget，但 SettleService.ts:157 的 AC-22 注释未同步更新
-  - 报告人: server-dev code-review | 日期: 2026-06-23
-
----
-
-## Client 端 Issues (code-review high, 2026-06-23)
-
-> 범위: `client/assets/scripts/` TASK-033 diff  
-> 중점: ①프로토콜 정렬 ②상태기계 ③씬 전환 메모리 누수  
-> 자체 수정 금지 — PM 결정 대기
-
-- [ ] ISSUE-C001 [🔴] `GameSceneManager.onLoad()` 에서 `gameController.setConnected()` 미호출 → `mySeatIndex=-1` → 게임 조작 전체 불가
-  - 복현 단계: 5인 입장 후 게임 시작 → 지주 선택 단계에서 지주 본인에게 암호 카드 선택 UI 미표시 → 출패 단계에서 본인 차례에 버튼 비활성 → 출패/패스 버튼 클릭 무반응
-  - 기대 동작: `onLoad` 내 `joinRoom` 완료 콜백에서 `gameController.setConnected(room.sessionId, mySeatIndex)` 호출해야 함
-  - 실제 동작: `GameSceneManager.ts:65-81` → `setConnected()` 호출 없음 → `mySeatIndex` 초기값 `-1` 유지 → `currentSeat === mySeatIndex` 항상 false
-  - 보고자: client-dev code-review | 날짜: 2026-06-23
-
-- [ ] ISSUE-C002 [🟡] `GameSceneManager.onLoad()` 가 singleton `netManager.init()` 재호출 → 인증 토큰 없는 새 Client 생성, WebSocket 재연결 시 인증 실패
-  - 복현 단계: HallScene에서 로그인 후 방 입장 → GameScene 로드 → 네트워크 순단 후 Colyseus SDK 재연결 시도
-  - 기대 동작: `init()` 는 앱 시작 시 한 번만 호출 / 또는 GameScene은 이미 설정된 client를 재사용
-  - 실제 동작: `GameSceneManager.ts:66` `this._net.init(API_ENDPOINT)` → `netManager.client = new Client(...)` (토큰 없음) → 재연결 시 `onAuth` 실패(JWT 미첨부) → 플레이어 강제 퇴장
-  - 보고자: client-dev code-review | 날짜: 2026-06-23
-
-- [ ] ISSUE-C003 [🟡] `onStateChange` switch에 `'doubling'` case 누락 → 가중 단계 중 재연결 시 doublingView 미표시
-  - 복현 단계: 가중 단계(phase='doubling') 중 플레이어 순단 후 재연결 → 서버 `STATE { phase:'doubling' }` 전송
-  - 기대 동작: doublingView 표시 및 가중 선택 UI 활성화
-  - 실제 동작: `GameController.ts:99` switch에 `'doubling'` case 없음 → 클라이언트 상태 LANDLORD_SELECT 유지, doublingView 미표시 → 타임아웃 후 강제 기본값 처리
-  - 보고자: client-dev code-review | 날짜: 2026-06-23
-
-- [ ] ISSUE-C004 [🟡] `onStateChange` switch에 `'waiting'` case 누락 → 재매치 후 결산 UI 잔류
-  - 복현 단계: 재매치 동의 후 서버 room 상태 리셋 → `STATE { phase:'waiting' }` 브로드캐스트
-  - 기대 동작: settlementView hide, 대기 UI 전환
-  - 실제 동작: `GameController.ts:99` switch에 `'waiting'` case 없음 → settlementView 계속 표시 → 이후 `'dealing'` 도착 시 결산 UI와 발패 애니메이션 동시 렌더링
-  - 보고자: client-dev code-review | 날짜: 2026-06-23
-
-- [ ] ISSUE-C005 [🟡] `showLastPlay` 가 `STATE` 매 delta마다 중복 호출 (출패 시만이 아님) + `lastPlay=[]` 시 `clear()` 미호출로 이전 출패 UI 잔류
-  - 복현 단계: ①첫 출패 후 다음 차례 turn_change delta 도착 / ②3인 pass 후 새 라운드 시작(`lastPlay=[]`)
-  - 기대 동작: ①새로운 `lastPlay` 변경 시에만 showLastPlay 호출 ②라운드 리셋 시 PlayZone 클리어
-  - 실제 동작: `GameController.ts:119` — `onStateChange` 는 매 schema delta에 호출, `state.lastPlay?.length > 0` 이면(첫 출패 후 항상 true) 매번 `showLastPlay` 재호출; `lastPlay=[]` 시 length=0으로 분기 스킵되나 clear()도 없음
-  - 보고자: client-dev code-review | 날짜: 2026-06-23
-
-- [ ] ISSUE-C006 [🟡] `setToken()` 에 `this.client === null` 가드 없음 → `init()` 전 호출 시 TypeError
-  - 복현 단계: `netManager.setToken(token)` 을 `netManager.init()` 이전에 호출
-  - 기대 동작: 조용히 무시하거나 큐에 보관
-  - 실제 동작: `NetManager.ts:35` `this.client.auth.token = token` → client가 null이면 `TypeError: Cannot set properties of null (setting 'token')`
-  - 보고자: client-dev code-review | 날짜: 2026-06-23
-
-- [ ] ISSUE-C007 [🟡] Quick Match 버튼 이중 탭 방어 없음 → `joinRoom` 두 번 동시 호출, 첫 번째 방 서버에 고아로 남음
-  - 복현 단계: 빠른 이중 탭으로 Quick Match / Create Room 버튼 연속 클릭
-  - 기대 동작: 첫 번째 joinRoom 진행 중에는 버튼 비활성(로딩 상태)
-  - 실제 동작: `HallSceneManager.ts` 이중 호출 방어 없음 → 두 개의 `joinOrCreate` 병렬 실행 → `netManager.room` 나중에 완료된 것으로 덮어씀 → 첫 번째 방은 `leaveRoom()` 없이 서버에 잔류
-  - 보고자: client-dev code-review | 날짜: 2026-06-23
-
-- [ ] ISSUE-C008 [🟢] `ClientGameState.IN_LOBBY` 선언됐으나 어디서도 전환되지 않는 dead state
-  - 파일: `GameController.ts:14`
-  - 보고자: client-dev code-review | 날짜: 2026-06-23
-
-- [ ] ISSUE-C009 [🟢] `API_ENDPOINT = 'ws://localhost:2567'` 가 `HallSceneManager.ts:18` 과 `GameSceneManager.ts:22` 에 중복 선언 — 프로덕션 배포 시 한 곳만 수정하면 불일치 발생
-  - 보고자: client-dev code-review | 날짜: 2026-06-23
+- [ ] ISSUE-C012 [🔴] ProtocolCoverage AC-18/19/20/22 全部 null — 错误码测试竞态导致错误未被捕获
+  - 复现: `npm test -- --testPathPattern=ProtocolCoverage.integration --forceExit` → AC-18/19/20/22 failed, received: undefined
+  - 根因（已确认）: 服务端把 4 个 AI 席位的出牌在同一 JS tick 同步完成，5 条 `turn_change` 消息作为一批到达客户端。`handleTurn` 对每条 turn_change 异步并发执行。发给 AC-18 测试的 `play_cards({ cards:[0] })` 消息到达服务端时，`currentTurnSeat` 已经是人类玩家席位，服务端把它当作"自己的回合"处理（卡合法则成功出牌，卡不在手牌则返回 1004），**不返回期望的 1003**。后续 AC-19/20/22 依赖"此时仍是自己回合且 lastPlay 为空"的假设，被上述意外出牌打乱，错误同样捕获失败。
+  - 期望: `ec.ac18_error.code === 1003`、`ec.ac19_error.code === 1004`、`ec.ac20_error.code === 1001`、`ec.ac22_error.code === 1002`
+  - 实际: 四者均为 null（`q.waitFor('error', 2_500)` 全部超时）
+  - 修复方向（需 PM 确认）：
+    - A: **出牌后立刻再发一次**——测试玩家合法出牌后立即发 `play_cards`，此时回合已推进给 AI，服务端必然返回 1003。AC-18 用这个时机测试，不再依赖"对方回合"的消息窗口。
+    - B: **双客户端**——引入第二个人类客户端，在第一个客户端回合时由第二个发 `play_cards`，100% 触发 1003；复杂度较高。
+    - C: **推迟 AC-18 到已知非我方回合**——在 AC-15~24 beforeAll 中，先让游戏跑完第一轮（`game_over` 或达到某个 turn 数）再测试错误码；改动量大。
+    - 推荐方案 A：改动最小，时序可靠。
+  - 影响: ProtocolCoverage AC-18/19/20/22 持续 FAIL，TASK-036 未完成
+  - 报告人: client-dev | 日期: 2026-06-25
 
 ---
 
 ## 已处理
 
+- [x] ISSUE-S004 [🔴] hint 返回单张Joker → 1001 | 根因: CardDecomposer.generateAll返回[], pickSmallestSingle([106])=[106]（单张王原规则非法）| 处理: TASK-039 shared/PatternHelper.ts 单张王→合法SINGLE | 测试: 395/395 + 9/9 | 2026-06-24
+- [x] ISSUE-S005 [🟡] turn_change 缺 isNewRound 字段 | 处理: TASK-039 CardRoom.ts startTurnTimer加isNewRound + PROTOCOL.md更新 | 测试: 395/395 | 2026-06-24
+- [x] ISSUE-S006 [🟢] [PASS] log 在守卫前打印 | 处理: TASK-039 CardRoom.ts handlePass log移至守卫后 | 测试: 395/395 | 2026-06-24
+
 - [x] ISSUE-001 [🟡] realPlayerCount 全阶段递减 | 处理: TASK-034 CardRoom.ts onLeave 移出 waiting 守卫 | 测试: AC-8/9/10 ✓ | 2026-06-23
 - [x] ISSUE-005 [🔴] handlePass 自由轮守卫 | 处理: TASK-034 CardRoom.ts handlePass isNewRound guard | 测试: AC-1/2/3 ✓ | 2026-06-23
 - [x] ISSUE-006 [🔴] landlord_select 无超时兜底 | 处理: TASK-034 CardRoom.ts landlordSelectTimer + env LANDLORD_SELECT_TIMEOUT | 测试: AC-4/5/6/7 ✓ | 2026-06-23
 - [x] ISSUE-007 [🟡] handleReconnectSync 缺 landlord_select 分支 | 处理: TASK-034 CardRoom.ts 补 landlord_select 分支 + bottomCards 存储 | 测试: AC-11/12/13 ✓ | 2026-06-23
+- [x] ISSUE-008 [🟢] finishGame 注释与实现相悖 | 处理: CardRoom.ts finishGame JSDoc 更新，明确 fire-and-forget 契约 | server-dev | 2026-06-24
+- [x] ISSUE-C001 [🔴] setConnected 未调用 → mySeatIndex=-1 | 处理: TASK-035 GameSceneManager.ts 加调用 | 测试: 256/256 ✓ | 2026-06-23
+- [x] ISSUE-C002 [🟡] netManager.init() 重复调用 | 处理: TASK-035 避免重复 init | 测试: 256/256 ✓ | 2026-06-23
+- [x] ISSUE-C003 [🟡] onStateChange 缺 doubling case | 处理: TASK-035 GameController.ts 补 doubling case | 测试: 256/256 ✓ | 2026-06-23
+- [x] ISSUE-C004 [🟡] onStateChange 缺 waiting case | 处理: TASK-035 GameController.ts 补 waiting case | 测试: 256/256 ✓ | 2026-06-23
+- [x] ISSUE-C005 [🟡] showLastPlay 重复调用 + clear() 未调用 | 处理: TASK-035 lastPlay 快照比较后复制 | 测试: 256/256 ✓ | 2026-06-23
+- [x] ISSUE-C006 [🟡] setToken null 守卫缺失 | 处理: TASK-035 NetManager.ts 加 null 守卫 | 测试: 256/256 ✓ | 2026-06-23
+- [x] ISSUE-C007 [🟡] Quick Match 双击防重入缺失 | 处理: TASK-035 MatchView.ts _withJoining helper | 测试: 256/256 ✓ | 2026-06-23
+- [x] ISSUE-S001 [🔴] your_hand 10s 超时 | 根因: AI_FILL_DELAY 未设为 0 | 处理: 环境配置，无需改代码 | 2026-06-23
+- [x] ISSUE-S002 [🔴] doubling_start 未到达 | 根因: client-dev 自行排查解决 | 2026-06-23
+- [x] ISSUE-S003 [🔴] game_over 60s 内未到达 | 处理: TASK-032c-fix 升级出牌代理（seat-gated + request_hint 驱动）+ server enqueueRaw no-op 修复 | 验收: 冒烟 9/9 全通，32s 完成，[FINISH] 出现 | 2026-06-24
+- [x] ISSUE-C010 [🟢] jest.config.js ts-jest globals 废弃警告 | 处理: globals→transform 写法迁移 | 产物: client/jest.config.js | 2026-06-24
+- [x] ISSUE-009 [🔴] rematch 窗口期 disconnect() 崩溃 | 处理: CardRoom.ts onLeave 中 realPlayerCount=0 时提前 clear(rematchWindow) | 测试: 369/369 ✓ | 2026-06-24
+- [x] ISSUE-010 [🟡] handlePass 无日志 | 处理: CardRoom.ts handlePass 加 [PASS] console.log | 测试: 369/369 ✓ | 2026-06-24
+- [x] ISSUE-003 [🟢] index.ts / authRoutes.ts 缺文件头 JSDoc | 处理: 补 @file @description @module | 2026-06-24

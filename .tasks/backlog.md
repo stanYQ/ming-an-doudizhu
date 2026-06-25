@@ -72,10 +72,44 @@
 
 - [x] TASK-032s [server] 集成冒烟准备：修 BUG-001/002/003/004 + 启动环境验证 → spec: specs/integration-smoke.md **[done: 356/356]**
 - [x] TASK-032c [client] 全流程集成冒烟测试：Node.js 直连真实 server，跑完整游戏流程 → spec: specs/integration-smoke.md **[done: 9/9 AC]**
+- [x] TASK-032c-fix [client] 修复 ISSUE-S003：升级冒烟测试出牌代理，按 hint 完整自然打一局直到 game_over → spec: specs/integration-smoke.md **[done: 9/9 AC，32s 完成]**
+- [x] TASK-036 [client] P1 协议全覆盖冒烟：按 PROTOCOL.md 覆盖所有消息、错误码、重连、HTTP 接口 → spec: specs/protocol-coverage-smoke.md **[done: 36/36]**
+
+## P4.6 任务（Bug 修复批次二，与 TASK-036 并行）
+
+- [x] TASK-037 [server] Bug 修复批次二：ISSUE-009 rematch disconnect崩溃 + ISSUE-010 handlePass log + ISSUE-003 文件头注释 **[done: 369/369]**
+- [x] TASK-038 [server] 测试阶段战报日志：finishGame 输出完整 BattleReport JSON（出牌序列 + 身份揭晓 + 倍率明细 + 结果），不落库 → spec: specs/battle-report-log.md **[done: 390/390]**
+- [x] TASK-039 [server+shared] Bug 修复批次三：① shared/PatternHelper.ts 单张王合法 SINGLE + 补测试 + GAME-RULES.md 更正 ② ISSUE-S004 根因排查（含 AIPlayer hint 推荐 Joker 单张场景）③ ISSUE-S005 turn_change 加 isNewRound + PROTOCOL.md 更新 ④ ISSUE-S006 [PASS] log 移位 **[done: 395/395]**
+- [x] TASK-039c [client+shared] 同步 TASK-039 shared 变更：client/assets/scripts/shared/PatternHelper.ts 同步单张王修复 + ISSUE-S005 turn_change handler 读 isNewRound + C011 error 1001 不 pass **[done]**
+- [x] TASK-040 [server] ISSUE-S007：realPlayerCount=0 时清除 AI fake clients + disconnect()，修复 GameFlow 后 503 **[done: 398/398]**
+
+## P5 任务（UI 视觉搭建，core 已验证）
+
+### P5.0 — oops-framework 集成 + 场景骨架
+
+- [ ] TASK-041 [client] LaunchScene + HallScene 节点树搭建 + AppRoot 初始化 + oops.res/storage 接入 → spec: specs/ui-flow-01-launch-hall.md **[ready]**
+- [ ] TASK-042 [client] MatchView（快速匹配 + 好友房）弹层搭建 + SeatItem Prefab + 等待动画 → spec: specs/ui-flow-02-match-wait.md **[ready]**
+
+### P5.1 — 游戏桌（依赖 TASK-041/042）
+
+- [ ] TASK-043 [client] GameScene 节点树 + CardItem Prefab + PlayerSeat Prefab + HandCardView + CodeCardSelector → spec: specs/ui-flow-03-deal-landlord.md **[ready]**
+- [ ] TASK-044 [client] DoublingView + PlayZone + 出牌交互 + hint 高亮 → spec: specs/ui-flow-04-doubling-play.md **[ready]**
+- [ ] TASK-045 [client] SettlementView + PlayerResultCard Prefab + 身份揭晓动画 + 再来一局 → spec: specs/ui-flow-05-settlement-rematch.md **[ready]**
+
+### P5.2 — 服务端协议补全（与 P5.1 并行）
+
+- [ ] TASK-046 [server] game_over 消息增强：添加 players[] + breakdown，供结算 UI 渲染 → spec: specs/server-game-over-enhance.md **[ready]**
+
+### P5.3 — P1 大厅功能（P5.0 上线后）
+
+- [ ] TASK-047 [server] GET /api/leaderboard：全服 Top 50 积分榜，Redis 缓存 60s → spec: 待写
+- [ ] TASK-048 [server] POST /api/checkin：每日签到 + 连续签到奖励积分（50/100/200/300/500/500/1000） → spec: 待写
+
+---
 
 ## P4.5 任务（协议对齐）
 
 - [x] TASK-033 [client] Client ↔ PROTOCOL.md 对齐：NetManager 单例 + auth token + play_broadcast 移除 + landlordSeat 修正 + suit 类型 + bottom_cards/hint 路由 → spec: specs/client-protocol-align.md **[done: 233/233]**
 
-- [ ] TASK-034 [server] Bug 修复批次一：ISSUE-005 handlePass守卫 + ISSUE-006 landlord_select超时 + ISSUE-001 realPlayerCount递减 + ISSUE-007 重连补全 → spec: specs/bugfix-server-034.md **[ready]**
-- [ ] TASK-035 [client] Bug 修复批次一：ISSUE-C001 setConnected + ISSUE-C002~C007 → spec: specs/bugfix-client-035.md **[ready；Step 7 冒烟等 TASK-034 完成后执行]**
+- [x] TASK-034 [server] Bug 修复批次一：ISSUE-005 handlePass守卫 + ISSUE-006 landlord_select超时 + ISSUE-001 realPlayerCount递减 + ISSUE-007 重连补全 → spec: specs/bugfix-server-034.md **[done: 369/369]**
+- [x] TASK-035 [client] Bug 修复批次一：ISSUE-C001 setConnected + ISSUE-C002~C007 → spec: specs/bugfix-client-035.md **[done: 256/256]**

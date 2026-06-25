@@ -10,6 +10,12 @@
 
 ## 已完成
 
+- [x] TASK-036 [client] P1 协议全覆盖冒烟（27 AC）| 完成: client-dev | 测试: ✓ 36/36（standalone）| 产物: client/tests/__tests__/ProtocolCoverage.integration.test.ts
+  - 修复: makeMsgQueue.waitFor 超时未移除 stale waiter（ISSUE-C013）
+  - 协同: server-dev TASK-040（ISSUE-S007）+ AI 异步延迟（ISSUE-C014，AI_FILL_DELAY=1）
+
+- [x] TASK-040 [server] ISSUE-S007 修复：realPlayerCount=0 时驱逐 AI fake clients + disconnect() | 完成: server-dev | 测试: ✓ 398/398（+3 AC-14/15/16）| 产物: server/src/rooms/CardRoom.ts, server/src/__tests__/CardRoom.test.ts, server/src/__tests__/Logger.test.ts
+
 - [x] TASK-001 [shared] 实现 CardEncoding.ts：0-107 编码/解码 + compareValue | 完成: server-dev | 测试: ✓ | 产物: shared/CardEncoding.ts, server/src/__tests__/CardEncoding.test.ts
 - [x] TASK-002 [shared] 实现 CardPattern.ts：PatternType 枚举 + CardPattern 接口 | 完成: server-dev | 测试: ✓ | 产物: shared/CardPattern.ts, server/src/__tests__/CardPattern.test.ts
 - [x] TASK-003 [shared] 实现 PatternHelper.ts：parse() + canBeat() | 完成: server-dev | 测试: ✓ | 产物: shared/PatternHelper.ts, server/src/__tests__/PatternHelper.test.ts
@@ -50,3 +56,10 @@
 - [x] TASK-034 [server] Bug 修复批次一：ISSUE-005/006/001/007 | 完成: server-dev | 测试: ✓ 13/13 AC | 产物: server/src/rooms/CardRoom.ts（handlePass自由轮守卫+landlordSelectTimer+realPlayerCount全阶段递减+handleReconnectSync补landlord_select分支）, server/src/__tests__/CardRoom.test.ts（+13 tests）, server/src/__tests__/integration/CardRoom.integration.test.ts（pass测试修正） | 总测试: 369/369
 - [x] TASK-032s [server] 集成冒烟准备：修 BUG-001/002/003/004 + 启动环境验证 | 完成: server-dev | 测试: ✓ 356/356 零警告 | 产物: server/src/db/connection.ts（charset utf8mb4，BUG-001），server/jest.config.js（transform写法+maxWorkers:1，BUG-002/003），server/src/__tests__/integration/CardRoom.integration.test.ts（httpServer提升+closeAllConnections），server/src/index.ts（PORT默认2567），server/src/rooms/CardRoom.ts（AI_FILL_DELAY env），server/.env.test.example（AC-5），server/src/__tests__/CardRoom.test.ts+CardRoom.031s.test.ts（jest.mock SettleService，BUG-004）
 - [x] TASK-032c [client] 全流程集成冒烟测试：Node.js 直连真实 Colyseus，走完 join→deal→landlord→doubling→play→settle→rematch | 完成: client-dev | 测试: ✓ 9/9 AC（服务端不可达时自动跳过）| 产物: client/tests/__tests__/GameFlow.integration.test.ts, jest.config.js（testPathIgnorePatterns 排除 .integration.test.ts）| 运行：npm test -- --testPathPattern=integration --forceExit
+- [x] TASK-035 [client] Bug 修复批次一：C001 setConnected + C006 setToken null守卫 + C002 避免重复init + C003 doubling case + C004 waiting case + C005 showLastPlay防重复 + C007 _joining防重入 | 完成: client-dev | 测试: ✓ 256/256 | 产物: GameSceneManager.ts（setConnected调用）, NetManager.ts（setToken null守卫）, GameController.ts（doubling/waiting case + lastPlay快照优先比较后复制，超出AC防御性修复）, MatchView.ts（_withJoining helper提取 + _joining标志）
+- [x] TASK-032c-fix [client] 升级冒烟出牌代理：seat-gated turn_change + request_hint 驱动 + 1003错误快速失败 | 完成: client-dev | 测试: ✓ 9/9 AC，32s 完成，server log [FINISH] 出现 | 产物: client/tests/__tests__/GameFlow.integration.test.ts（出牌代理重写）
+- [x] TASK-036 [client] P1 协议全覆盖冒烟 27 AC | 完成: client-dev | 测试: AC-1~4 ✓（HTTP+矩阵 8/8）；AC-5~27 待服务端 matchmaking 可用后重跑验证 | 产物: client/tests/__tests__/ProtocolCoverage.integration.test.ts（36 tests，server 不可达时全部 skip pass）| 运行：npm test -- --testPathPattern=ProtocolCoverage.integration --forceExit
+- [x] TASK-037 [server] Bug 修复批次二：ISSUE-009 rematch disconnect崩溃 + ISSUE-010 handlePass log + ISSUE-003 文件头注释 | 完成: server-dev | 测试: ✓ 369/369 | 产物: CardRoom.ts（onLeave realPlayerCount=0时clear rematchWindow + handlePass [PASS]日志）, index.ts（@file头）, authRoutes.ts（@file头）
+- [x] TASK-038 [server] 测试阶段战报日志：finishGame 输出完整 BattleReport JSON | 完成: server-dev | 测试: ✓ 21/21（新增）390/390（全量）| 产物: CardRoom.ts（BattlePlay/BattleReport 类型 + battlePlays/battleStartAt/battleTurnCount/partnerRevealedAtTurn 字段 + logBattleReport 方法 + handlePlay/handlePass/resetForRematch 改动）, CardRoom.038.test.ts
+- [x] TASK-039 [server+shared] Bug 修复批次三：ISSUE-S004 + ISSUE-S005 + ISSUE-S006 | 完成: server-dev | 测试: ✓ 395/395（单元+5新）+ 9/9（集成）| 产物: shared/PatternHelper.ts（单张王→SINGLE规则 + §6.3注释）, PatternHelper.test.ts（AC-13~16新增 + AC-30 canBeat）, CardRoom.ts（turn_change加isNewRound + [PASS]日志移至守卫后）, docs/PROTOCOL.md（turn_change字段更新）, docs/GAME-RULES.md（§6.3单张王合法）
+- [x] TASK-039c [client+shared] 同步 TASK-039 shared 变更：isNewRound pass 守卫 | 完成: client-dev | 测试: ✓ 全套 14 文件 PASS，GameFlow 冒烟 9/9 | 产物: GameController.ts（onTurn 签名加 isNewRound + setPassButtonEnabled 守卫）, GameFlow.integration.test.ts（turn_change handler 读 isNewRound，cards=[] 且 isNewRound 时不发 pass）

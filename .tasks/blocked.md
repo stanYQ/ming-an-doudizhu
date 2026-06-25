@@ -10,6 +10,12 @@
 
 ## 当前阻塞
 
+- [ ] TASK-036 阻塞原因: AC-18 需要服务端 `startTurnTimer` 改为异步执行 AI | 需要: server-dev 改动 | 报告人: client-dev | 日期: 2026-06-25
+  - 当前: `startTurnTimer` 同步调用 `executeAIAction`（CardRoom.ts:601-603），所有 AI 回合在同一 JS tick 完成，客户端收到任何非我方 `turn_change` 时服务端 `currentTurnSeat` 已回到 0
+  - 需要: `startTurnTimer` 中 AI 执行改为 `this.clock.setTimeout(() => this.executeAIAction(currentSid), AI_FILL_DELAY || 1)`，让 AI_FILL_DELAY=1 时给客户端一个 1ms 窗口触发 1003
+  - 影响范围: 仅 `server/src/rooms/CardRoom.ts` 约 3 行；AI_FILL_DELAY=0 时行为与现在完全相同（setTimeout 0 = 立即调度），AI_FILL_DELAY>=1 时 AI 推迟执行
+  - 测试验证: server-dev 改完重启后，client-dev 用 `AI_FILL_DELAY=1` 跑 ProtocolCoverage.integration 验证 AC-18 得到 1003
+
 - [x] TASK-024 Gate 已通过（PM 决策方案 C：Gate 改为 42%–55%）| 报告人: server-dev | 日期: 2026-06-18 | 结果: 整体 44.79% ✓
 
   **调参历史（100k 局基准）**

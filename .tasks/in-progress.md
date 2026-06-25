@@ -10,7 +10,12 @@
 
 ## 当前进行中
 
-- [ ] TASK-035 [client] C001-C007 bugfix批次一（setConnected/setToken/init重复/state补case/showLastPlay/防连点） | 认领: client-dev | 开始: 2026-06-23
+- [ ] TASK-046 [server] game_over 消息增强：players[] + breakdown，供结算 UI 渲染 | 认领: server-dev | 开始: 2026-06-25
+
+
+
+
+
 
 
 
