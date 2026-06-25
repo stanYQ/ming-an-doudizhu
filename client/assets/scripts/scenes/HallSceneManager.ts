@@ -6,9 +6,10 @@
  */
 
 import {
-    _decorator, Component, Label, Button, Node, director, sys,
+    _decorator, Component, Label, Button, Node, director,
 } from 'cc';
 import { message } from 'db://oops-framework/core/common/event/MessageManager';
+import { oops } from 'db://oops-framework/core/Oops';
 import { HallView, HallPlayerInfo } from '../ui/HallView';
 import { MatchView } from '../ui/MatchView';
 import { netManager } from '../net/NetManager';
@@ -16,7 +17,6 @@ import { netManager } from '../net/NetManager';
 const { ccclass, property } = _decorator;
 
 const API_ENDPOINT = 'ws://localhost:2567';
-const CACHE_KEY_USER = 'ddz_user';
 
 @ccclass('HallSceneManager')
 export class HallSceneManager extends Component {
@@ -72,8 +72,7 @@ export class HallSceneManager extends Component {
         // 进入 dealing 后通知 MatchView 禁用取消按钮
         message.on('STATE',          this._onState,         this);
 
-        const raw  = sys.localStorage.getItem(CACHE_KEY_USER);
-        const info: HallPlayerInfo | null = raw ? JSON.parse(raw) : null;
+        const info: HallPlayerInfo | null = oops.storage?.getJson('ddz_user', null) ?? null;
         hallView.show(info);
     }
 

@@ -5,7 +5,8 @@
  * @module client/scenes
  */
 
-import { _decorator, Component, Label, Node, director, sys, assetManager } from 'cc';
+import { _decorator, Component, Label, Node, director, assetManager } from 'cc';
+import { oops } from 'db://oops-framework/core/Oops';
 import { LaunchView } from '../ui/LaunchView';
 
 const { ccclass, property } = _decorator;
@@ -39,9 +40,9 @@ export class LaunchSceneManager extends Component {
             });
 
         view._storage = {
-            getItem:    (k) => sys.localStorage.getItem(k),
-            setItem:    (k, v) => sys.localStorage.setItem(k, v),
-            removeItem: (k) => sys.localStorage.removeItem(k),
+            getItem:    (k) => oops.storage?.get(k) ?? null,
+            setItem:    (k, v) => oops.storage?.set(k, v),
+            removeItem: (k) => oops.storage?.remove(k),
         };
 
         view._navigateToHall = () => director.loadScene('HallScene');

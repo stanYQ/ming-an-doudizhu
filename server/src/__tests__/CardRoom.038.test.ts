@@ -38,8 +38,9 @@ jest.mock("../logic/Deck", () => ({
 
 jest.mock("../services/SettleService", () => ({
   SettleService: {
-    calcDeltas: jest.fn(() => new Map([["p0", 10], ["p1", -5], ["p2", -5]])),
-    settle:     jest.fn().mockResolvedValue(undefined),
+    calcDeltas:     jest.fn(() => new Map([["p0", 10], ["p1", -5], ["p2", -5]])),
+    calcMultiplier: jest.fn(() => 1),
+    settle:         jest.fn().mockResolvedValue(undefined),
   },
 }));
 
