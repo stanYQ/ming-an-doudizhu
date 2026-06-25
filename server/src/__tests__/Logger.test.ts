@@ -165,20 +165,20 @@ describe("Logger — output destination and size (AC-13 / AC-14)", () => {
     spy.mockRestore();
   });
 
-  it("AC-14: output does not exceed 4096 bytes", async () => {
+  it("AC-14: output does not exceed 65536 bytes", async () => {
     const p = captureNext();
-    const longStack = "x".repeat(8000);
+    const longStack = "x".repeat(80000);
     const err = new Error("big");
     err.stack = longStack;
     Logger.error("big error", { error: err });
     const line = await p;
-    expect(line.length).toBeLessThanOrEqual(4096);
+    expect(line.length).toBeLessThanOrEqual(65536);
   });
 
   it("AC-14: normal log with large context is truncated", async () => {
     const p = captureNext();
-    Logger.info("large ctx", { data: "a".repeat(5000) });
+    Logger.info("large ctx", { data: "a".repeat(70000) });
     const line = await p;
-    expect(line.length).toBeLessThanOrEqual(4096);
+    expect(line.length).toBeLessThanOrEqual(65536);
   });
 });

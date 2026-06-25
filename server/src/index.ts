@@ -1,3 +1,8 @@
+/**
+ * @file index.ts
+ * @description Colyseus 服务端入口：HTTP 服务器 + WebSocket transport + 路由挂载
+ * @module server
+ */
 import http from "http";
 import { Server } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";

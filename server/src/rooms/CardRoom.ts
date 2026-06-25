@@ -17,6 +17,38 @@ import { compareValue } from "../../../shared/CardEncoding";
 import { PatternType } from "../../../shared/CardPattern";
 import { SettleService, GameSummaryV2, TableType } from "../services/SettleService";
 import { AIPlayer } from "../logic/AIPlayer";
+import { Logger }   from "../utils/Logger";
+
+type BattlePlay = {
+  turn:        number;
+  seatIndex:   number;
+  sessionId:   string;
+  cards:       number[];
+  isPass:      boolean;
+  patternType: string | null;
+};
+
+type BattleReport = {
+  roomId:                string;
+  startAt:               number;
+  endAt:                 number;
+  landlordSeat:          number;
+  partnerSeat:           number | null;
+  partnerRevealedAtTurn: number | null;
+  plays:                 BattlePlay[];
+  doubling: {
+    landlordDouble:    1 | 2;
+    partnerDoubled:    boolean;
+    otherDoubledSeats: number[];
+  };
+  result: {
+    winnerCamp:   "landlord_camp" | "civilian_camp";
+    isSpring:     boolean;
+    isAntiSpring: boolean;
+    bombCount:    number;
+    scores:       Record<string, number>;
+  };
+};
 
 export class CardRoom extends Room<GameState> {
   maxClients = 5;
@@ -80,6 +112,12 @@ export class CardRoom extends Room<GameState> {
   // realPlayerCount 有两个用途：① waiting_update 的 readyCount ② rematch 票数阈值（ISSUE-001 修复点）
   private realPlayerCount = 0;
   private nicknameMap     = new Map<string, string>(); // sessionId → 昵称，供 room_update 使用
+
+  // Battle report — TASK-038
+  private battlePlays:            BattlePlay[]  = [];
+  private battleStartAt:          number        = 0;
+  private battleTurnCount:        number        = 0;
+  private partnerRevealedAtTurn:  number | null = null;
 
   // Rematch — TASK-031s
   private rematchWindow:  { clear(): void } | null = null; // 30s 窗口期定时器，到期才 disconnect
@@ -155,6 +193,22 @@ export class CardRoom extends Room<GameState> {
     // waiting 阶段仅广播更新后提前返回；游戏中则尝试保留席位 60s。
     if (!this.aiSessionIds.has(client.sessionId)) {
       this.realPlayerCount = Math.max(0, this.realPlayerCount - 1);
+      // ISSUE-009: 真实玩家全部离线时取消 rematch 定时器，防止 30s 后 disconnect() 访问
+      // 已销毁的 WebSocket 导致 _forciblyCloseClient → undefined.removeAllListeners() 崩溃
+      if (this.realPlayerCount === 0) {
+        // ISSUE-S007: 最后一个真实玩家离开 → 清定时器、驱逐 AI fake clients、强制 dispose
+        if (this.rematchWindow) {
+          this.rematchWindow.clear();
+          this.rematchWindow = null;
+        }
+        const arr = this.clients as unknown as Array<{ sessionId: string }>;
+        for (const aiSid of this.aiSessionIds) {
+          const idx = arr.findIndex(c => c.sessionId === aiSid);
+          if (idx !== -1) arr.splice(idx, 1);
+        }
+        this.disconnect();
+        return;
+      }
     }
 
     if (this.state.phase === "waiting") {
@@ -174,7 +228,8 @@ export class CardRoom extends Room<GameState> {
   // ── dealing ────────────────────────────────────────────────────────────────
 
   private startDealing(): void {
-    this.state.phase = "dealing";
+    this.state.phase  = "dealing";
+    this.battleStartAt = Date.now();
 
     const deck       = Deck.shuffle();
     const { hands, bottom, faceUpCard } = Deck.deal(deck);
@@ -284,6 +339,7 @@ export class CardRoom extends Room<GameState> {
       client.send("error", { code: result.errorCode!, msg: "invalid play" });
       return;
     }
+    console.log('[PLAY] sid=%s cards=%j', client.sessionId, msg.cards);
 
     this.cancelTurnTimer();
     this.timeoutCount.set(client.sessionId, 0);
@@ -306,8 +362,19 @@ export class CardRoom extends Room<GameState> {
           CodeCard.containsCodeCard(msg.cards, this.codeCardPair)) {
         partnerPlayer.revealed = true;
         this.broadcast("identity_reveal", { playerId: this.partnerId, role: "partner" });
+        this.partnerRevealedAtTurn = this.battleTurnCount + 1; // set before increment below
       }
     }
+
+    this.battleTurnCount++;
+    this.battlePlays.push({
+      turn:        this.battleTurnCount,
+      seatIndex:   player.seatIndex,
+      sessionId:   client.sessionId,
+      cards:       [...msg.cards],
+      isPass:      false,
+      patternType: String(pat.type),
+    });
 
     RuleEngine.removeCards(hand, msg.cards);
     player.handCount = hand.length;
@@ -333,7 +400,8 @@ export class CardRoom extends Room<GameState> {
     const player = this.state.players.get(client.sessionId);
     if (!player || player.seatIndex !== this.state.currentTurnSeat) return;
 
-    // ISSUE-005: free round — player must play a card, cannot pass
+    // 自由出牌轮（lastPlay 为空，或上一出牌者是自己）必须出牌，不可 pass（GAME-RULES.md 3.2）
+    // ISSUE-005: 修复前此处缺少守卫，客户端可连续 pass 破坏 lastPlay 状态
     const isNewRound = this.state.lastPlay.length === 0 ||
                        this.state.lastPlayerId === client.sessionId;
     if (isNewRound) {
@@ -341,10 +409,22 @@ export class CardRoom extends Room<GameState> {
       return;
     }
 
+    console.log("[PASS] sid=%s seat=%d", client.sessionId, this.state.currentTurnSeat);
+
+    this.battleTurnCount++;
+    this.battlePlays.push({
+      turn:        this.battleTurnCount,
+      seatIndex:   player.seatIndex,
+      sessionId:   client.sessionId,
+      cards:       [],
+      isPass:      true,
+      patternType: null,
+    });
+
     this.cancelTurnTimer();
     this.passCount++;
 
-    // 4 consecutive passes → round is over, next player gets free play
+    // 其余 4 人全部 pass → 本轮结束，清空桌面，下一人自由出牌
     if (this.passCount >= 4) {
       this.passCount = 0;
       this.state.lastPlay.splice(0, this.state.lastPlay.length);
@@ -355,17 +435,21 @@ export class CardRoom extends Room<GameState> {
     this.startTurnTimer();
   }
 
+  /**
+   * 断线重连后补发当前阶段所需的全量状态。
+   * Schema delta 会自动同步公开状态；此处只补发私密数据（手牌、底牌）和阶段触发信号。
+   */
   private handleReconnectSync(client: Client): void {
     const hand = this.hands.get(client.sessionId) ?? [];
     client.send("your_hand", { cards: hand });
     if (this.state.phase === "landlord_select") {
-      // ISSUE-007: landlord needs bottom cards + prompt to reopen code-card selector
+      // 底牌不在 Schema 里，地主断线后本地丢失；需从内存重播才能重新弹出选牌界面（ISSUE-007）
       if (client.sessionId === this.landlordId) {
         client.send("bottom_cards",         { cards: this.bottomCards });
         client.send("landlord_select_start", {});
       }
     } else if (this.state.phase === "doubling") {
-      // AC-12: replay doubling_start so reconnected client knows the phase
+      // 重播 doubling_start 让客户端重新渲染加倍 UI，不会重置已提交状态（服务端幂等）
       client.send("doubling_start", {
         timeout:           30,
         landlordSeatIndex: this.state.landlordSeat,
@@ -437,6 +521,7 @@ export class CardRoom extends Room<GameState> {
   }
 
   private checkDoublingComplete(): void {
+    // 必须等全部 5 人提交后才结算；AI 玩家在 startDoubling 里已同步提交，不会卡住
     if (this.doublingSubmits.size < 5) return;
     this.cancelDoublingTimer();
     this.finishDoubling();
@@ -472,14 +557,14 @@ export class CardRoom extends Room<GameState> {
   }
 
   private finishDoubling(): void {
-    // AC-8/9: broadcast results without role info
+    // doubling_result 只含席位和是否加倍，不含角色信息——角色在 identity_reveal 时才公开
     const results = this.seatMap.map((sid, seatIndex) => ({
       seatIndex,
       doubled: this.doublingSubmits.get(sid) === 2,
     }));
     this.broadcast("doubling_result", { results });
 
-    // AC-10/11: store for SettleService V2 (TASK-022)
+    // doublingData 存入实例，finishGame 时传给 SettleService 计算倍率
     const landlordDouble = (this.doublingSubmits.get(this.landlordId) ?? 1) as 1 | 2;
     const partnerDoubled = this.partnerId !== null &&
       this.doublingSubmits.get(this.partnerId) === 2;
@@ -504,15 +589,17 @@ export class CardRoom extends Room<GameState> {
 
   private startTurnTimer(): void {
     const currentSid = this.seatMap[this.state.currentTurnSeat];
+    console.log('[TURN] seat=%d sid=%s isAI=%s', this.state.currentTurnSeat, currentSid, this.aiSessionIds.has(currentSid));
 
     this.broadcast("turn_change", {
-      seatIndex: this.state.currentTurnSeat,
-      deadline:  Date.now() + 30000,
+      seatIndex:  this.state.currentTurnSeat,
+      deadline:   Date.now() + 30000,
+      isNewRound: this.state.lastPlay.length === 0,
     });
 
-    // AI players act immediately — no timer needed
     if (this.aiSessionIds.has(currentSid)) {
-      this.executeAIAction(currentSid);
+      const delay = Number(process.env.AI_FILL_DELAY) || 1;
+      this.clock.setTimeout(() => this.executeAIAction(currentSid), delay);
       return;
     }
 
@@ -530,6 +617,11 @@ export class CardRoom extends Room<GameState> {
 
   // ── timeout /托管 ──────────────────────────────────────────────────────────
 
+  /**
+   * 出牌超时回调。
+   * 前两次超时自动 pass（给玩家找回网络的机会）；第三次起进入托管，由 executeManagedAction 代打。
+   * 托管状态在本局内不解除（GAME-RULES.md 4.5）。
+   */
   private handleTimeout(sessionId: string): void {
     const count = (this.timeoutCount.get(sessionId) ?? 0) + 1;
     this.timeoutCount.set(sessionId, count);
@@ -538,7 +630,7 @@ export class CardRoom extends Room<GameState> {
     if (this.managed.has(sessionId)) {
       this.executeManagedAction(sessionId);
     } else {
-      // Auto-pass for first two timeouts
+      // 前两次超时视为主动 pass
       this.passCount++;
       if (this.passCount >= 4) {
         this.passCount = 0;
@@ -577,6 +669,10 @@ export class CardRoom extends Room<GameState> {
 
   // ── settlement ─────────────────────────────────────────────────────────────
 
+  /**
+   * 从局内追踪数据构造 GameSummaryV2，传给 SettleService 计算积分。
+   * 春天：地主方胜且平民方全程未出牌；反春：平民方胜且地主方全程未出牌（GAME-RULES.md 5.3）。
+   */
   private buildGameSummary(firstOutId: string, winnerCamp: "landlord_camp" | "civilian_camp"): GameSummaryV2 {
     const landlordWins  = winnerCamp === "landlord_camp";
     const isSpring      = landlordWins && this.civilianPlayed.size === 0;
@@ -616,12 +712,18 @@ export class CardRoom extends Room<GameState> {
     };
   }
 
+  /**
+   * 某玩家打完最后一张牌时调用。
+   * calcDeltas 是纯函数（不访问 DB），结果直接附在 game_over 里广播。
+   * DB 写入（settle）异步 fire-and-forget：失败只打日志，不阻塞客户端看到结算界面。
+   */
   private finishGame(winnerId: string): void {
+    console.log('[FINISH] winner=%s', winnerId);
     this.cancelTurnTimer();
     const winnerCamp = RuleEngine.determineWinner(winnerId, this.landlordId, this.partnerId);
     const summary    = this.buildGameSummary(winnerId, winnerCamp);
 
-    // Compute scores synchronously (pure function, no DB)
+    // 同步计算积分增减，附在 game_over payload 里，客户端无需二次请求
     const deltas = SettleService.calcDeltas(summary);
     const scores: Record<string, number> = {};
     for (const [psid, d] of deltas) scores[psid] = d;
@@ -629,12 +731,60 @@ export class CardRoom extends Room<GameState> {
     this.state.phase = "settlement";
     this.broadcast("game_over", { winnerCamp, scores });
 
-    // Async DB persist — failure does not block game_over delivery
+    // DB 写入失败不影响已广播的 game_over（fire-and-forget 契约，ISSUE-008 注释更正点）
     SettleService.settle(summary).catch(e =>
       console.error("[CardRoom] settle failed:", (e as Error).message)
     );
 
+    this.logBattleReport(winnerId, winnerCamp, summary, scores);
     this.startRematchWindow();
+  }
+
+  /**
+   * 组装并输出一局完整战报（单行 JSON）。仅在 finishGame 末尾调用一次。
+   * 上线落库回放功能（P5）可直接复用此数据结构。
+   */
+  private logBattleReport(
+    winnerId:  string,
+    winnerCamp: "landlord_camp" | "civilian_camp",
+    summary:   ReturnType<typeof this.buildGameSummary>,
+    scores:    Record<string, number>,
+  ): void {
+    const partnerSeat = this.partnerId !== null
+      ? (this.state.players.get(this.partnerId)?.seatIndex ?? null)
+      : null;
+
+    const landlordDouble = this.doublingData?.landlordDouble ?? 1;
+    const partnerDoubled = this.doublingData?.partnerDoubled ?? false;
+    const otherDoubledSeats: number[] = [];
+    if (this.doublingData) {
+      for (const [psid, val] of this.doublingData.playerDoubles) {
+        if (val === 2 && psid !== this.landlordId && psid !== this.partnerId) {
+          const p = this.state.players.get(psid);
+          if (p) otherDoubledSeats.push(p.seatIndex);
+        }
+      }
+    }
+
+    const report: BattleReport = {
+      roomId:                (this as any).roomId ?? "unknown",
+      startAt:               this.battleStartAt,
+      endAt:                 Date.now(),
+      landlordSeat:          this.state.landlordSeat,
+      partnerSeat,
+      partnerRevealedAtTurn: this.partnerRevealedAtTurn,
+      plays:                 this.battlePlays,
+      doubling: { landlordDouble, partnerDoubled, otherDoubledSeats },
+      result: {
+        winnerCamp,
+        isSpring:     summary.isSpring,
+        isAntiSpring: summary.isAntiSpring,
+        bombCount:    this.bombCount,
+        scores,
+      },
+    };
+
+    Logger.info("[BATTLE]", report as unknown as import("../utils/Logger").LogContext);
   }
 
   // ── hint ───────────────────────────────────────────────────────────────────
@@ -714,7 +864,8 @@ export class CardRoom extends Room<GameState> {
   private fillWithAI(count: number): void {
     for (let i = 0; i < count; i++) {
       const sid        = `ai_${Math.random().toString(36).slice(2, 10).padEnd(8, "0")}`;
-      const fakeClient = { sessionId: sid, send: (_t: string, _d: unknown) => {} };
+      // enqueueRaw: Colyseus broadcast 内部调用，AI 客户端无真实 WebSocket，设为 no-op
+      const fakeClient = { sessionId: sid, send: (_t: string, _d: unknown) => {}, enqueueRaw: (_: ArrayBuffer | Uint8Array) => {} };
       (this.clients as any[]).push(fakeClient);
 
       const seatIndex = this.seatMap.length;
@@ -773,6 +924,7 @@ export class CardRoom extends Room<GameState> {
     const player     = this.state.players.get(sessionId);
     const isNewRound = this.state.lastPlay.length === 0 ||
                        this.state.lastPlayerId === sessionId;
+    console.log('[AI] decide sid=%s hand=%d isNewRound=%s', sessionId, hand.length, isNewRound);
     const lastPattern = isNewRound
       ? null
       : CardPatternEngine.parse([...this.state.lastPlay] as number[]);
@@ -788,6 +940,7 @@ export class CardRoom extends Room<GameState> {
 
     const cards      = AIPlayer.decide(hand, lastPattern, ctx);
     const fakeClient = this.clients.find(c => c.sessionId === sessionId) as Client;
+    console.log('[AI] cards=%j fakeClient=%s', cards.length, !!fakeClient);
 
     if (cards.length > 0 && fakeClient) {
       this.handlePlay(fakeClient, { cards });
@@ -890,7 +1043,8 @@ export class CardRoom extends Room<GameState> {
 
   /**
    * 重置局内状态以供再来一局使用。
-   * 保留 seatMap / clients / aiSessionIds / ownerSessionId，只清除局内数据。
+   * 保留 seatMap / clients / aiSessionIds / nicknameMap / realPlayerCount（ISSUE-001 修复依赖）。
+   * ownerSessionId 也保留，好友房房主不变。
    */
   private resetForRematch(): void {
     this.hands.clear();
@@ -911,6 +1065,10 @@ export class CardRoom extends Room<GameState> {
     this.civilianPlayed.clear();
     this.landlordCampPlayed.clear();
     this.rematchAgreed.clear();
+    this.battlePlays             = [];
+    this.battleStartAt           = 0;
+    this.battleTurnCount         = 0;
+    this.partnerRevealedAtTurn   = null;
 
     this.state.phase               = "waiting";
     this.state.currentTurnSeat     = -1;

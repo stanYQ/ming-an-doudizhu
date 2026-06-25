@@ -136,6 +136,30 @@ describe('parse()', () => {
     expect(parse([SJ, LJ, LJ2]).type).toBe(PatternType.INVALID);
   });
 
+  // ── single joker (GAME-RULES §6.3 更新：单张王合法出牌） ─────────────────
+  it('AC-13: single small joker → SINGLE, primaryValue=16', () => {
+    const p = parse([SJ]);
+    expect(p.type).toBe(PatternType.SINGLE);
+    expect(p.primaryValue).toBe(16);
+    expect(p.length).toBe(1);
+  });
+
+  it('AC-14: single large joker → SINGLE, primaryValue=17', () => {
+    const p = parse([LJ]);
+    expect(p.type).toBe(PatternType.SINGLE);
+    expect(p.primaryValue).toBe(17);
+    expect(p.length).toBe(1);
+  });
+
+  it('AC-15: single small joker deck-1 (card 106) → SINGLE', () => {
+    expect(parse([SJ2]).type).toBe(PatternType.SINGLE);
+    expect(parse([SJ2]).primaryValue).toBe(16);
+  });
+
+  it('AC-16: joker + regular card → INVALID', () => {
+    expect(parse([SJ, encode(0, 0, 0)]).type).toBe(PatternType.INVALID);
+  });
+
   // ── consecutive pairs ─────────────────────────────────────────────────────
 
   it('CardPattern-AC-9: 6-card consecutive pairs → CONSECUTIVE_PAIRS', () => {
@@ -288,5 +312,15 @@ describe('canBeat()', () => {
     expect(canBeat(inv, single(0))).toBe(false);
     expect(canBeat(single(12), inv)).toBe(false);
     expect(canBeat(inv, inv)).toBe(false);
+  });
+
+  it('AC-30: single joker pressure — small joker > 2, large joker > small joker', () => {
+    const singleSmallJ = parse([SJ]);
+    const singleLargeJ = parse([LJ]);
+    const single2      = parse([sp(12)]); // 2, pv=15
+    expect(canBeat(singleSmallJ, single2)).toBe(true);      // 16 > 15
+    expect(canBeat(singleLargeJ, singleSmallJ)).toBe(true); // 17 > 16
+    expect(canBeat(singleSmallJ, singleLargeJ)).toBe(false);// 16 < 17
+    expect(canBeat(single2, singleSmallJ)).toBe(false);     // 15 < 16
   });
 });

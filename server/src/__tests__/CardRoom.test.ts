@@ -732,3 +732,43 @@ describe("ISSUE-007 — handleReconnectSync landlord_select branch", () => {
     expect(bottomMsg).toBeUndefined();
   });
 });
+
+describe("ISSUE-S007 — last real player leaves → AI evicted + room disposed", () => {
+  function setupWithAI() {
+    const { room, timers } = buildRoom();
+    const clients = addClients(room, 1, "p"); // 1 real player
+    // inject 2 AI fake clients
+    const aiIds = ["ai_01", "ai_02"];
+    for (const sid of aiIds) {
+      (room as any).aiSessionIds.add(sid);
+      (room as any).clients.push({ sessionId: sid, send: jest.fn() });
+    }
+    (room as any).realPlayerCount = 1;
+    (room as any).allowReconnection = jest.fn().mockRejectedValue(new Error("timeout"));
+    return { room, clients, timers, aiIds };
+  }
+
+  it("AC-14: last real player leaves → disconnect() called", async () => {
+    const { room, clients } = setupWithAI();
+    await room.onLeave(clients[0] as any, true);
+    expect((room as any).disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("AC-15: last real player leaves → AI fake clients removed from this.clients", async () => {
+    const { room, clients, aiIds } = setupWithAI();
+    await room.onLeave(clients[0] as any, true);
+    const remaining = (room as any).clients.map((c: any) => c.sessionId);
+    for (const sid of aiIds) {
+      expect(remaining).not.toContain(sid);
+    }
+  });
+
+  it("AC-16: last real player leaves with active rematch timer → timer cleared", async () => {
+    const { room, clients } = setupWithAI();
+    const mockTimer = { clear: jest.fn() };
+    (room as any).rematchWindow = mockTimer;
+    await room.onLeave(clients[0] as any, true);
+    expect(mockTimer.clear).toHaveBeenCalledTimes(1);
+    expect((room as any).rematchWindow).toBeNull();
+  });
+});

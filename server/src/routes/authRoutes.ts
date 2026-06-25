@@ -1,3 +1,8 @@
+/**
+ * @file authRoutes.ts
+ * @description HTTP 路由处理：POST /auth/login + GET /auth/me
+ * @module server
+ */
 import type { IncomingMessage, ServerResponse } from "http";
 import { AuthService } from "../services/AuthService";
 

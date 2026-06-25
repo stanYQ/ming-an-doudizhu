@@ -6,7 +6,8 @@
     "test": "jest --coverage",
     "build": "tsc",
     "start": "node dist/server/src/index.js",
-    "dev": "ts-node --project tsconfig.json src/index.ts"
+    "dev": "ts-node --project tsconfig.json src/index.ts",
+    "battle-report": "node tools/battle-report.js"
   },
   "dependencies": {
     "@colyseus/schema": "^2.0.0",

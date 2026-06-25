@@ -7,7 +7,7 @@ export interface LogContext {
   [key: string]: unknown;
 }
 
-const MAX_BYTES = 4096;
+const MAX_BYTES = 65536; // 64 KB — [BATTLE] 战报完整输出
 
 export class Logger {
   static debug(msg: string, ctx?: LogContext): void {
