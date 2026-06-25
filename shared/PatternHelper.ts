@@ -32,6 +32,12 @@ export function parse(cards: number[]): CardPattern {
   const regulars = cards.filter(c => !isJoker(c));
 
   // ── joker-only patterns ───────────────────────────────────────────────────
+  // GAME-RULES §6.3: 单张王可作为单张出（大王 pv=17，小王 pv=16）；
+  //                  同类型双王为王炸；1大+1小、3张及以上王、王与普通牌混搭均非法
+  if (jokers.length === 1 && regulars.length === 0) {
+    return { type: PatternType.SINGLE, cards, primaryValue: compareValue(jokers[0]), length: 1 };
+  }
+
   if (jokers.length === 2 && regulars.length === 0) {
     const largeCount = jokers.filter(c => isLargeJoker(c)).length;
     const smallCount = jokers.filter(c => isSmallJoker(c)).length;
@@ -40,8 +46,6 @@ export function parse(cards: number[]): CardPattern {
     return invalid(cards); // 1 small + 1 large
   }
 
-  // GAME-RULES §6.3: 王炸必须恰好 2 张且同类型；1张王、3张及以上王、
-  // 王与普通牌混搭均不构成任何合法牌型
   if (jokers.length > 0) return invalid(cards);
 
   // ── group regular cards by compareValue (sorted ascending) ───────────────
