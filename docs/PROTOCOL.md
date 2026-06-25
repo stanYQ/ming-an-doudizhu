@@ -187,18 +187,18 @@ export interface CardPattern {
 （全部提交或超时后）
                                         ←────  [广播] doubling_result { results: [{seatIndex, doubled}] }
                                         ←────  Schema delta: phase → "playing"
-                                        ←────  [广播] turn_change { seatIndex, deadline }
+                                        ←────  [广播] turn_change { seatIndex, deadline, isNewRound }
 
 ── 出牌循环 ────────────────────────────────────────────────────
 [当前玩家] room.send("play_cards", { cards })
                                         ←────  Schema delta: lastPlay / lastPlayerId / handCount
-                                        ←────  [广播] turn_change { seatIndex, deadline }
+                                        ←────  [广播] turn_change { seatIndex, deadline, isNewRound }
                               （如打出暗号牌）
                                         ←────  [广播] identity_reveal { playerId, role: "partner" }
                                         ←────  Schema delta: players[id].revealed = true
 
 [其他玩家] room.send("pass")
-                                        ←────  [广播] turn_change { seatIndex, deadline }
+                                        ←────  [广播] turn_change { seatIndex, deadline, isNewRound }
 
 ── 结算 ────────────────────────────────────────────────────────
 （某玩家出完手牌）
@@ -348,7 +348,7 @@ room.send("reconnect_sync");
 
 服务端响应：
 - 私发 `your_hand { cards }`：补发当前手牌
-- 若 `phase === "playing"`：私发 `turn_change { seatIndex, deadline }`
+- 若 `phase === "playing"`：私发 `turn_change { seatIndex, deadline, isNewRound }`
 - 若 `phase === "doubling"`：重播 `doubling_start { timeout, landlordSeatIndex }`
 
 ---
@@ -496,10 +496,12 @@ room.onMessage("doubling_result", (data: {
 
 ```typescript
 room.onMessage("turn_change", (data: {
-  seatIndex: number,  // 0–4，当前出牌席位
-  deadline:  number,  // Unix 时间戳 (ms)，= Date.now() + 30000
+  seatIndex:  number,   // 0–4，当前出牌席位
+  deadline:   number,   // Unix 时间戳 (ms)，= Date.now() + 30000
+  isNewRound: boolean,  // true = 自由出牌轮（lastPlay 已清空），客户端可立即判断，不等 Schema delta
 }) => {
   currentSeat = data.seatIndex;
+  // 用 isNewRound 直接决定 pass 按钮状态，避免 Schema delta 50ms 延迟导致误判
 });
 ```
 
@@ -696,7 +698,7 @@ async function reconnect(): Promise<void> {
 
 `reconnect_sync` 响应：
 - 私发 `your_hand { cards }`
-- 若 `phase === "playing"`：私发 `turn_change { seatIndex, deadline }`
+- 若 `phase === "playing"`：私发 `turn_change { seatIndex, deadline, isNewRound }`
 - 若 `phase === "doubling"`：重播 `doubling_start { timeout, landlordSeatIndex }`
 
 ---
