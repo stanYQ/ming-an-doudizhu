@@ -36,6 +36,19 @@ Step 7  真实服务端验证（等 TASK-034 完成后执行）
         → 启动 infra + server，跑 GameFlow.integration 冒烟测试
         → 确认 9/9 AC 全部通过（非 skip）
 
+        ⚠️ 冒烟阻塞处理（重要）：
+        遇到任何阻塞，禁止自行排查超过 10 分钟。
+        立即将问题写入 .tasks/integration-issues.md，格式：
+
+        - [ ] ISSUE-Cxxx [🔴] 一句话描述
+          - 复现步骤: 做了什么
+          - 期望行为: 按 PROTOCOL.md 应该发生什么
+          - 实际行为: 实际发生了什么（附错误信息）
+          - 报告人: client-dev | 日期: YYYY-MM-DD
+
+        写完后通知 PM，由 PM 判断根因并分配修复方。
+        不要自行判断是 server 还是 client 的问题，只描述现象。
+
 Step 8  完成
         → 更新 .tasks/done.md，从 in-progress.md 移除 TASK-035
 ```

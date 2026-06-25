@@ -39,6 +39,13 @@ Step 7  验证（{模块专属，见下}）
         [server] → npm test 全套（含 integration），确认当前测试数全绿零警告
         [shared] → npm test，两端均无回归
 
+        ⚠️ 冒烟阻塞处理：
+        遇到阻塞禁止自行排查超过 10 分钟。立即写入 .tasks/integration-issues.md：
+        - [ ] ISSUE-Cxxx [🔴/🟡/🟢] 一句话描述
+          - 复现步骤 / 期望行为 / 实际行为（附错误信息）
+          - 报告人: client-dev | 日期: YYYY-MM-DD
+        写完通知 PM，由 PM 判断根因并分配修复方。不要自行判断归属端。
+
 Step 8  完成
         → 更新 .tasks/done.md，从 in-progress.md 移除
         → 格式：- [x] TASK-{id} [{模块}] {描述} | 完成: {dev} | 测试: ✓ {N/N} | 产物: {文件列表}
