@@ -728,8 +728,37 @@ export class CardRoom extends Room<GameState> {
     const scores: Record<string, number> = {};
     for (const [psid, d] of deltas) scores[psid] = d;
 
+    const landlordWins = winnerCamp === "landlord_camp";
+    const players = [...this.state.players.entries()]
+      .map(([sid, p]) => ({
+        sessionId:  sid,
+        nickname:   this.nicknameMap.get(sid) ?? `玩家${p.seatIndex + 1}`,
+        role:       (sid === this.landlordId ? "landlord"
+                  : sid === this.partnerId  ? "partner"
+                  : "civilian") as "landlord" | "partner" | "civilian",
+        isWinner:   landlordWins
+                    ? (sid === this.landlordId || sid === this.partnerId)
+                    : (sid !== this.landlordId && sid !== this.partnerId),
+        scoreDelta: deltas.get(sid) ?? 0,
+        newScore:   null,
+        seatIndex:  p.seatIndex,
+      }))
+      .sort((a, b) => a.seatIndex - b.seatIndex);
+
+    const BASE: Record<string, number> = { starter: 1, casual: 2, expert: 5, peak: 10 };
+    const breakdown = {
+      baseScore:       BASE[summary.tableType] ?? 1,
+      multiplier:      SettleService.calcMultiplier(summary),
+      landlordDouble:  summary.landlordDouble,
+      partnerDoubled:  summary.partnerDoubled,
+      bombCount:       summary.bombCount,
+      isSpring:        summary.isSpring,
+      isAntiSpring:    summary.isAntiSpring,
+      isLandlordAlone: summary.isLandlordAlone,
+    };
+
     this.state.phase = "settlement";
-    this.broadcast("game_over", { winnerCamp, scores });
+    this.broadcast("game_over", { winnerCamp, scores, players, breakdown });
 
     // DB 写入失败不影响已广播的 game_over（fire-and-forget 契约，ISSUE-008 注释更正点）
     SettleService.settle(summary).catch(e =>

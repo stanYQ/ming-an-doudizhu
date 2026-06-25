@@ -31,8 +31,9 @@ jest.mock("../logic/Deck", () => ({
 
 jest.mock("../services/SettleService", () => ({
   SettleService: {
-    calcDeltas: jest.fn(() => new Map<string, number>()),
-    settle:     jest.fn().mockResolvedValue(undefined),
+    calcDeltas:      jest.fn(() => new Map<string, number>()),
+    calcMultiplier:  jest.fn(() => 1),
+    settle:          jest.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -770,5 +771,114 @@ describe("ISSUE-S007 — last real player leaves → AI evicted + room disposed"
     await room.onLeave(clients[0] as any, true);
     expect(mockTimer.clear).toHaveBeenCalledTimes(1);
     expect((room as any).rematchWindow).toBeNull();
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TASK-046 — game_over payload 增强 (AC-1 ~ AC-6)
+// ══════════════════════════════════════════════════════════════════════════════
+
+describe("TASK-046 — game_over enhanced payload", () => {
+  /** Drain p0 (landlord) to 1 card and play it, returns the game_over broadcast data. */
+  function triggerGameOver() {
+    const { room, clients, broadcasts } = setupPlaying();
+    const hand = (room as any).hands.get(clients[0].sessionId) as number[];
+    const lastCard = hand[0];
+    hand.splice(1);
+    room.state.players.get(clients[0].sessionId)!.handCount = 1;
+    msg(room, "play_cards", clients[0], { cards: [lastCard] });
+    const over = broadcasts.find(b => b.type === "game_over")!;
+    return { data: over.data as any, room, clients };
+  }
+
+  it("AC-1: game_over.winnerCamp preserved", () => {
+    const { data } = triggerGameOver();
+    expect(data.winnerCamp).toBe("landlord_camp");
+  });
+
+  it("AC-2: game_over.scores preserved and zero-sum", () => {
+    const { data } = triggerGameOver();
+    expect(data.scores).toBeDefined();
+    const total = Object.values(data.scores as Record<string, number>).reduce((a, b) => a + b, 0);
+    expect(total).toBe(0);
+  });
+
+  it("AC-3: game_over.players is 5-element array sorted by seatIndex", () => {
+    const { data } = triggerGameOver();
+    expect(Array.isArray(data.players)).toBe(true);
+    expect(data.players).toHaveLength(5);
+    for (let i = 0; i < 5; i++) {
+      expect(data.players[i].seatIndex).toBe(i);
+    }
+  });
+
+  it("AC-3: players[] contains required fields", () => {
+    const { data } = triggerGameOver();
+    for (const p of data.players) {
+      expect(typeof p.sessionId).toBe("string");
+      expect(typeof p.nickname).toBe("string");
+      expect(["landlord", "partner", "civilian"]).toContain(p.role);
+      expect(typeof p.isWinner).toBe("boolean");
+      expect(typeof p.scoreDelta).toBe("number");
+      expect(p.newScore).toBeNull();
+      expect(typeof p.seatIndex).toBe("number");
+    }
+  });
+
+  it("AC-3: landlord role assigned to landlord seat, partner to partner seat", () => {
+    const { data, room } = triggerGameOver();
+    const landlordSeat = (room as any).state.players.get((room as any).landlordId)?.seatIndex;
+    const partnerSeat  = (room as any).state.players.get((room as any).partnerId)?.seatIndex;
+    expect(data.players[landlordSeat].role).toBe("landlord");
+    expect(data.players[partnerSeat].role).toBe("partner");
+    for (const p of data.players) {
+      if (p.seatIndex !== landlordSeat && p.seatIndex !== partnerSeat) {
+        expect(p.role).toBe("civilian");
+      }
+    }
+  });
+
+  it("AC-4: game_over.breakdown contains required fields", () => {
+    const { data } = triggerGameOver();
+    const bd = data.breakdown;
+    expect(typeof bd.baseScore).toBe("number");
+    expect(typeof bd.multiplier).toBe("number");
+    expect([1, 2]).toContain(bd.landlordDouble);
+    expect(typeof bd.partnerDoubled).toBe("boolean");
+    expect(typeof bd.bombCount).toBe("number");
+    expect(typeof bd.isSpring).toBe("boolean");
+    expect(typeof bd.isAntiSpring).toBe("boolean");
+    expect(typeof bd.isLandlordAlone).toBe("boolean");
+  });
+
+  it("AC-5: AI players included in players[] with nickname AI and newScore null", () => {
+    const { room, broadcasts } = buildRoom();
+    const clients = addClients(room, 1, "p");
+    // Inject 4 AI fake clients
+    const aiIds: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      const sid = `ai_t046_${i}`;
+      aiIds.push(sid);
+      (room as any).aiSessionIds.add(sid);
+      (room as any).userIdMap.set(sid, 0);
+      (room as any).nicknameMap.set(sid, `AI${i + 1}`);
+      const fakeClient = { sessionId: sid, send: jest.fn() };
+      (room as any).clients.push(fakeClient);
+      room.onJoin(fakeClient as any, { nickname: `AI${i + 1}` });
+    }
+    msg(room, "select_code_card", clients[0], { suit: 0, value: 0 });
+    completeDoubling(room, [clients[0], ...aiIds.map(sid => ({ sessionId: sid, send: jest.fn() }))] as any);
+    const hand = (room as any).hands.get(clients[0].sessionId) as number[];
+    const lastCard = hand[0];
+    hand.splice(1);
+    room.state.players.get(clients[0].sessionId)!.handCount = 1;
+    msg(room, "play_cards", clients[0], { cards: [lastCard] });
+    const over = broadcasts.find(b => b.type === "game_over")!;
+    const data = over.data as any;
+    expect(data.players).toHaveLength(5);
+    const aiPlayers = data.players.filter((p: any) => aiIds.includes(p.sessionId));
+    for (const ap of aiPlayers) {
+      expect(ap.newScore).toBeNull();
+    }
   });
 });
