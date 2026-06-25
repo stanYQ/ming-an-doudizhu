@@ -202,7 +202,7 @@ export interface CardPattern {
 
 ── 结算 ────────────────────────────────────────────────────────
 （某玩家出完手牌）
-                                        ←────  [广播] game_over { winnerCamp, scores }
+                                        ←────  [广播] game_over { winnerCamp, scores, players[], breakdown }
                                                          winnerCamp: "landlord_camp" | "civilian_camp"
                                                          scores: { [sessionId]: scoreDelta }
 
@@ -524,15 +524,33 @@ room.onMessage("identity_reveal", (data: {
 
 ```typescript
 room.onMessage("game_over", (data: {
-  winnerCamp: "landlord_camp" | "civilian_camp",
-  scores:     Record<string, number>,  // { [sessionId]: scoreDelta }，正=赢分，负=输分
+  winnerCamp: "landlord_camp" | "civilian_camp";
+  scores:     Record<string, number>;   // { [sessionId]: scoreDelta }，兼容字段，保留
+  players: Array<{
+    sessionId:  string;
+    nickname:   string;
+    role:       "landlord" | "partner" | "civilian";
+    isWinner:   boolean;
+    scoreDelta: number;
+    newScore:   null;    // 服务端不查库；客户端用 storedScore + scoreDelta 计算后写 oops.storage
+    seatIndex:  number;
+  }>;
+  breakdown: {
+    baseScore:       number;   // 场次底分 1/2/5/10
+    multiplier:      number;   // 全局倍数 M（炸弹+春天+独挑，已封顶）
+    landlordDouble:  1 | 2;
+    partnerDoubled:  boolean;
+    bombCount:       number;
+    isSpring:        boolean;
+    isAntiSpring:    boolean;
+    isLandlordAlone: boolean;
+  };
 }) => {
   showSettlement(data);
-  // multiplier / breakdown 不在广播中，仅写入 DB
 });
 ```
 
-> `scoreDelta` 为本局积分变化量，客户端如需展示新积分，需将其叠加到本地缓存的 `score`。
+> `players` 按 `seatIndex` 升序排列，AI 补位玩家 `newScore` 为 `null`。`scores` 字段保留供旧客户端兼容。
 
 ---
 
