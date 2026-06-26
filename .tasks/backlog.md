@@ -87,7 +87,7 @@
 
 ### P5.0 前置 — 架构迁移（TASK-041 开始前必须完成）
 
-- [ ] TASK-049 [client] Phase 1 架构迁移：GameController → GameMgr（脱CC壳，三层职责厘清）→ spec: specs/arch-phase1-gamemgr.md **[ready]**
+- [x] TASK-049 [client] Phase 1 架构迁移：GameController → GameMgr（脱CC壳，三层职责厘清）→ spec: specs/arch-phase1-gamemgr.md **[done]**
 
 ### P5.0 — oops-framework 集成 + 场景骨架
 
@@ -102,7 +102,7 @@
 
 ### P5.2 — 服务端协议补全（与 P5.1 并行）
 
-- [ ] TASK-046 [server] game_over 消息增强：添加 players[] + breakdown，供结算 UI 渲染 → spec: specs/server-game-over-enhance.md **[ready]**
+- [x] TASK-046 [server] game_over 消息增强：添加 players[] + breakdown，供结算 UI 渲染 → spec: specs/server-game-over-enhance.md **[done]**
 
 ### P5.3 — P1 大厅功能（P5.0 上线后）
 
