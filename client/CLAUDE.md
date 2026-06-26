@@ -55,20 +55,34 @@ CC Component    纯TS单例     纯TS模块
 | **Logic** | `logic/` `ui/view/` | `*Logic.ts` 或原 `*View.ts` | ❌ 禁止 |
 | **Manager** | `net/` `core/` | `*Manager.ts` | ❌ 禁止 |
 
+### 职责边界
+
+| 层 | 能做 | 不能做 |
+|----|------|--------|
+| **Ctrl** | 持有 UI 视图 / 收集 UI 数据 / on*Click 代理 / 渲染节点 | 业务判断 / 调网络 |
+| **GameMgr** | 持有子Logic / 调 oops.gui.toast / oops.res / oops.storage / 接收 oops.message | 持有 UI 对象 / import 'cc' |
+| **Logic** | 纯业务计算 / 调 netManager 发请求 | UI 引用 / oops.xxx / import 'cc' |
+
 ### 调用规则
 
 ```
-Ctrl.onXxxClick()
-  └→ this._mgr.onXxxClick()          ← Ctrl 只能调 GameMgr，不能绕过
-        └→ this.handLogic.xxx()       ← GameMgr 委托子 Logic
-              └→ callback / oops.message  ← Logic 通知 Ctrl 渲染，不持有 Ctrl 引用
+Ctrl.onPlayBtnClick()
+  cards = this._handCardView.getSelectedCards()  ← 从自己持有的 UI 取数据
+  └→ this._mgr.requestPlay(cards)               ← 传数据值，不传 UI 对象
+        └→ this._handLogic.validate(cards)       ← 纯业务
+           if error → oops.gui.toast(msg)        ← GameMgr 调框架 API
+           if ok    → netManager.playCards(cards) ← Logic 发请求
+        └→ this.onRender?.('TURN', data)         ← 通知 Ctrl 渲染
+  Ctrl._render('TURN', data)
+        this._playZone.setInteractable(true)     ← 只在 Ctrl 操作节点
 ```
 
-- Ctrl → GameMgr：直接调用 ✅
-- GameMgr → Logic：直接调用 ✅
-- Logic → Ctrl：`onRenderNeeded` callback 或 `oops.message.emit` ✅
-- Ctrl 跳过 GameMgr 直接持 Logic 实例：❌ 立即修
-- Logic 持有 Ctrl 引用：❌ 立即修
+- Ctrl → GameMgr：传**数据值**作参数，绝不传 UI 对象 ✅
+- GameMgr → Logic：传数据，收结果 ✅
+- GameMgr → Ctrl：`onRender` callback ✅
+- Logic → 外部：只能 `return` 结果，不能主动调任何外部 ✅
+- Logic 持有 UI / 调 oops.xxx：❌ 立即修
+- GameMgr 持有 UI 对象：❌ 立即修
 
 ### 硬红线 grep（每次 commit 前必跑）
 
