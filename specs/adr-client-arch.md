@@ -22,12 +22,16 @@
 ## 三层定义（精确边界，不可模糊）
 
 ```
-Manager 层（全局单例）
-  NetManager.ts            已有，不变
-  oops.storage / oops.res   框架提供，不变
+GameMgr 层（游戏级协调者，单例）
+  scripts/logic/GameMgr.ts        ← 持有所有子 Logic 实例，是 Ctrl 的唯一入口
+    ├── matchLogic: MatchLogic
+    ├── handLogic:  HandLogic
+    ├── settlementLogic: SettlementLogic
+    └── ...
+  NetManager.ts                   ← 网络单例，已有，不变
+  oops.storage / oops.res          ← 框架提供，不变
 
 Logic 层（纯 TS，零 CC 依赖，可 Jest 直接测试）
-  scripts/logic/GameLogic.ts      ← GameController.ts 迁移来，去掉 CC Component 壳
   scripts/logic/MatchLogic.ts     ← MatchView.ts 重命名（TASK-042 时执行）
   scripts/logic/HandLogic.ts      ← HandCardView.ts 重命名（TASK-043 时执行）
   scripts/ui/view/*.ts             ← 保留路径，视为 Logic 层的延伸（已无 CC 导入）
@@ -35,19 +39,34 @@ Logic 层（纯 TS，零 CC 依赖，可 Jest 直接测试）
 Ctrl 层（CC Component，只负责节点注入 + 渲染，不含业务逻辑）
   scripts/ui/ctrl/LaunchCtrl.ts   已有
   scripts/ui/ctrl/HallCtrl.ts     已有
-  scripts/ui/ctrl/GameCtrl.ts     已有（改为引用 GameLogic 替代 GameController）
+  scripts/ui/ctrl/GameCtrl.ts     已有（改为引用 GameMgr 替代 GameController）
   新 Prefab 脚本                   如 CardItem.ts / SeatItem.ts（直接挂节点）
 ```
 
 ---
 
-## 层间通信规则
+## 调用方向（单向向下）
 
 ```
-Ctrl → Logic:  可直接调用方法（Ctrl 持有 Logic 实例引用）
-Logic → Ctrl:  只能通过 oops.message.emit('EVENT_NAME', data) 广播，禁止持有 Ctrl 引用
-Manager → *:   全局可访问，无方向限制
+Ctrl
+ │  ① UI 事件触发，直接调用 GameMgr 方法
+ ▼
+GameMgr
+ │  ② 委托给对应子 Logic 处理
+ ▼
+Logic（MatchLogic / HandLogic / ...）
+ │  ③ 处理完成，通知 Ctrl 更新渲染
+ │     方式 A：Logic 持有 callback（由 Ctrl 在 init 时注册）
+ │     方式 B：oops.message.emit（适合广播型通知，如服务端消息）
+ ▼
+Ctrl（渲染/更新节点）
 ```
+
+**规则**：
+- Ctrl → GameMgr：直接方法调用 ✅
+- GameMgr → Logic：直接方法调用 ✅
+- Logic → Ctrl：callback 或 oops.message，禁止持有 Ctrl 引用 ✅
+- Ctrl 不能绕过 GameMgr 直接持有 Logic 实例 ❌
 
 ---
 
@@ -125,73 +144,84 @@ grep "@layer logic" client/assets/scripts/ui/ctrl/ # 结果必须为空
 
 ## 迁移计划（执行顺序）
 
-### Phase 1 — GameController 脱 CC（0.5天，TASK-041 开始前）
+### Phase 1 — GameController 脱 CC，升级为 GameMgr（0.5天，TASK-041 开始前）
 
-**目标文件**: `game/GameController.ts` → 迁移为 `logic/GameLogic.ts`
+**目标文件**: `game/GameController.ts` → 迁移为 `logic/GameMgr.ts`
 
 当前问题：
 ```typescript
 @ccclass('GameController')
-export class GameController extends Component {  // Logic 层不应 extend Component
+export class GameController extends Component {  // 不应 extend Component
 ```
 
-迁移后 `logic/GameLogic.ts`：
+迁移后 `logic/GameMgr.ts`：
 ```typescript
 /**
- * @file GameLogic.ts
+ * @file GameMgr.ts
+ * @description 游戏级协调者，持有所有子Logic实例，是Ctrl层的唯一调用入口。
  * @layer logic
  * @module client/logic
  */
-export class GameLogic {  // 纯 TS class，无 CC 继承，可 new GameLogic() 直接测试
-    private state: ClientGameState = ClientGameState.CONNECTING;
-    // 全部现有方法保留不变，删除 onLoad/onDestroy（生命周期交由 Ctrl 管理）
+export class GameMgr {
+    // 子 Logic 模块（Phase 2 逐步拆出）
+    readonly matchLogic      = new MatchLogic();
+    readonly handLogic       = new HandLogic();
+    readonly settlementLogic = new SettlementLogic();
 
-    init(refs: {
-        handCardView:     any;
-        playZone:         any;
-        playerSeats:      any[];
-        codeCardSelector: any;
-        settlementView:   any;
-        doublingView:     any;
-        netManager:       any;
-    }): void {
-        Object.assign(this, refs);
-        this._registerMessages();
+    // 渲染回调（由 GameCtrl.onLoad 注册）
+    onRenderNeeded?: (event: string, data: unknown) => void;
+
+    private state: ClientGameState = ClientGameState.CONNECTING;
+
+    init(netManager: NetManager): void {
+        this._net = netManager;
+        this._registerMessages();    // 监听服务端消息，委托给子 Logic
     }
 
     destroy(): void {
         this._unregisterMessages();
     }
+
+    // ── Ctrl 调用的公开方法 ──────────────────────────────────────────────────
+    onPlayButtonClick(): void { this.handLogic.confirmPlay(this._net); }
+    onPassButtonClick(): void { this._net.pass(); }
+    setConnected(seatIndex: number, sessionId: string): void { /* ... */ }
 }
 ```
 
-`GameCtrl.ts` 配套修改（移除 `@property(GameController)`）：
+`GameCtrl.ts` 配套修改（移除 `@property(GameController)`，改持有 `GameMgr`）：
 ```typescript
-private _logic!: GameLogic;
+private _mgr!: GameMgr;
 
 onLoad() {
-    this._logic = new GameLogic();
-    this._logic.init({
-        handCardView:     this._buildHandCardView(),
-        playZone:         this._buildPlayZone(),
-        playerSeats:      this._buildSeats(),
-        codeCardSelector: this._buildCodeSelector(),
-        settlementView:   this._buildSettlementView(),
-        doublingView:     this._buildDoublingView(),
-        netManager:       netManager,
+    this._mgr = new GameMgr();
+
+    // 注册渲染回调：Logic 通知 Ctrl 更新节点
+    this._mgr.onRenderNeeded = (event, data) => this._render(event, data);
+
+    // 把节点引用注入子 Logic（替代原来的属性注入）
+    this._mgr.handLogic.init({
+        playButton:   this.playButton,
+        patternLabel: this.patternLabel,
     });
-    // setConnected 逻辑
+    this._mgr.settlementLogic.init({
+        rootNode:    this.settlementRoot,
+        bannerLabel: this.bannerLabel,
+        // ...
+    });
+
+    this._mgr.init(netManager);
+
     const room = netManager.room;
     if (room) {
-        const mySessionId = room.sessionId as string;
-        const myPlayer    = (room.state?.players as any)?.get?.(mySessionId);
-        this._logic.setConnected((myPlayer?.seatIndex as number) ?? -1, mySessionId);
+        const myPlayer = (room.state?.players as any)?.get?.(room.sessionId);
+        this._mgr.setConnected((myPlayer?.seatIndex as number) ?? -1, room.sessionId as string);
     }
 }
-onDestroy() { this._logic.destroy(); }
-onPlayButtonClick()     { this._logic.onPlayButtonClick(); }
-onPassButtonClick()     { this._logic.onPassButtonClick(); }
-// ... 其余 delegate 方法不变
+onDestroy()            { this._mgr.destroy(); }
+onPlayButtonClick()    { this._mgr.onPlayButtonClick(); }
+onPassButtonClick()    { this._mgr.onPassButtonClick(); }
+// ... 其余按钮代理不变
 ```
 
 ### Phase 2 — 视图文件重命名（按 TASK 顺序，不提前）
@@ -210,8 +240,8 @@ onPassButtonClick()     { this._logic.onPassButtonClick(); }
 
 | 文件 | 现状 | 目标 | 迁移动作 |
 |------|------|------|----------|
-| `game/GameController.ts` | ⚠️ 混层（CC + Logic） | Logic | Phase 1：脱 CC，迁至 `logic/GameLogic.ts` |
-| `ui/ctrl/GameCtrl.ts` | ✅ Ctrl | Ctrl | Phase 1 配套：改引用 GameLogic |
+| `game/GameController.ts` | ⚠️ 混层（CC + Logic） | Logic | Phase 1：脱 CC，迁至 `logic/GameMgr.ts` |
+| `ui/ctrl/GameCtrl.ts` | ✅ Ctrl | Ctrl | Phase 1 配套：改持有 GameMgr |
 | `ui/ctrl/HallCtrl.ts` | ✅ Ctrl | Ctrl | 不动 |
 | `ui/ctrl/LaunchCtrl.ts` | ✅ Ctrl | Ctrl | 不动 |
 | `ui/view/MatchView.ts` | ✅ Logic（无 CC） | Logic | Phase 2：重命名 |
@@ -273,7 +303,7 @@ PM 之前的决策（方案 C 变体）有一个关键错误：
 
 ## 参考
 
-- `specs/ui-flow-01~05.md` — P5 UI Spec（Phase 1 完成后更新 GameLogic 引用路径）
+- `specs/ui-flow-01~05.md` — P5 UI Spec（Phase 1 完成后更新 GameMgr 引用路径）
 - `client/CLAUDE.md` — client-dev 工作规范
 - `client/assets/scripts/ui/ctrl/GameCtrl.ts` — Phase 1 改动主体
 - `client/assets/scripts/game/GameController.ts` — Phase 1 迁移源
