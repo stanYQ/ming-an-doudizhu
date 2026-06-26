@@ -4,9 +4,9 @@
  * @module client/ui
  */
 
-import { PatternType } from '../shared/CardPattern';
-import { compareValue } from '../shared/CardEncoding';
-import { parse } from '../shared/PatternHelper';
+import { PatternType } from '../../shared/CardPattern';
+import { compareValue } from '../../shared/CardEncoding';
+import { parse } from '../../shared/PatternHelper';
 
 const PATTERN_LABEL: Record<string, string> = {
   [PatternType.SINGLE]:              '单张',
