@@ -10,6 +10,13 @@
 
 ## 已完成
 
+- [x] TASK-041 [client] 架构清理部分 | 完成: client-dev | 测试: ✓ 全量绿（+LaunchLogic 8条 +HallLogic 12条）
+      产物（代码）: logic/LaunchLogic.ts + HallLogic.ts, ctrl/LaunchCtrl.ts + HallCtrl.ts, core/AppRoot.ts, resources/config.json
+      rm: ui/view/LaunchView.ts + HallView.ts; 测试迁移: LaunchLogic.test.ts + HallLogic.test.ts
+      ⚠️ 待人工完成：Step 3 LaunchScene+HallScene 节点树搭建 / Step 4 挂脚本 @property / Step 6 Cocos Preview 验收 AC-1~15
+
+- [x] TASK-049 [client] 三层架构全面对齐 | 完成: client-dev | 测试: ✓ 42/42（GameMgr unit）| 产物: client/assets/scripts/logic/{GameMgr,HandLogic,SettlementLogic,LaunchLogic}.ts, client/assets/scripts/ui/ctrl/{GameCtrl,HallCtrl,LaunchCtrl}.ts, client/tests/__tests__/GameMgr.test.ts（git mv from GameController.test.ts）; git rm GameController.ts
+
 - [x] TASK-046 [server] game_over 消息增强：players[] + breakdown | 完成: server-dev | 测试: ✓ 405/405（+8 AC-1~5）| 产物: server/src/rooms/CardRoom.ts, server/src/__tests__/CardRoom.test.ts, docs/PROTOCOL.md
 
 - [x] TASK-036 [client] P1 协议全覆盖冒烟（27 AC）| 完成: client-dev | 测试: ✓ 36/36（standalone）| 产物: client/tests/__tests__/ProtocolCoverage.integration.test.ts
