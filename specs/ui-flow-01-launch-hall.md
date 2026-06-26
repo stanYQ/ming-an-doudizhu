@@ -11,29 +11,34 @@
 ## 执行流程
 
 ```
-Step 0  oops Root 初始化（本任务独有，后续 TASK 复用）
+Step 0  认领 → 更新 .tasks/in-progress.md
+
+Step 1  架构清理（UI 搭建前必须完成）
+        → 新建 logic/HallMgr.ts（见「架构清理」章节）
+        → 扩充 logic/LaunchMgr.ts，吸收 LaunchView.ts 的业务逻辑
+        → 重写 ui/ctrl/LaunchCtrl.ts，调 LaunchMgr 决策，持有节点
+        → 重写 ui/ctrl/HallCtrl.ts，调 HallMgr，注册 onRender
+        → git rm ui/view/LaunchView.ts ui/view/HallView.ts
+        → 迁移测试：LaunchView.test.ts → LaunchMgr.test.ts
+                    HallView.test.ts   → HallMgr.test.ts
+        → npx jest 全绿
+
+Step 2  oops Root 初始化（本任务独有，后续 TASK 复用）
         → 创建 resources/config.json（见「oops 初始化」章节）
         → 在 LaunchScene 根节点挂载 AppRoot.ts（继承 Root）
         → 确认 oops.res / oops.storage / oops.gui.toast 可用
 
-Step 1  认领
-        → 更新 .tasks/in-progress.md
-
-Step 2  搭建节点树
+Step 3  搭建节点树
         → 按本 spec「节点树」章节在 Cocos Creator 创建场景和节点
         → 先搭结构，纯色块占位，不需要美术资源
 
-Step 3  挂载脚本
-        → 按「脚本绑定」章节将已有 .ts 脚本挂到对应节点
-        → 在编辑器 Inspector 填写公开属性引用
+Step 4  挂载脚本
+        → LaunchCtrl.ts 挂 LaunchScene/Canvas/LaunchController
+        → HallCtrl.ts 挂 HallScene/Canvas
+        → 在编辑器 Inspector 填写 @property 节点引用
 
-Step 4  实现动画
+Step 5  实现动画
         → 按「动效」章节实现 Tween / Animation Clip
-        → 先跑通逻辑，曲线和时长按 UI-DESIGN.md §8 标准
-
-Step 5  接入脚本逻辑
-        → 确认 LaunchView.ts 的加载流程能跳转到 HallScene
-        → 确认 HallView.ts 的按钮事件能打开 MatchView
 
 Step 6  /verify
         → 启动服务端（AI_FILL_DELAY=1 AUTH_MODE=stub）
@@ -43,6 +48,57 @@ Step 6  /verify
 Step 7  完成
         → 更新 .tasks/done.md，从 in-progress.md 移除
 ```
+
+---
+
+## 架构清理（Step 1 详情）
+
+### logic/HallMgr.ts — 公开接口
+
+```typescript
+// @layer logic
+export class HallMgr {
+    onRender?: (event: string, data: unknown) => void;
+
+    init(): void       // 注册 WAITING_UPDATE / ROOM_UPDATE / STATE 消息
+    destroy(): void    // 注销消息
+
+    startQuickMatch(): Promise<void>          // joinRoom('game', { mode: 'quick' })
+    startFriendRoom(): Promise<void>          // joinRoom('game', { mode: 'friend' })
+    cancelMatch(): Promise<void>              // leaveRoom()
+    forceStart(): void                        // netManager.forceStart()
+    joinByCode(roomCode: string): Promise<void>
+    shareRoom(text: string): Promise<void>    // sys.copyTextToClipboard / wx.shareAppMessage
+}
+```
+
+### onRender 事件
+
+| 事件 | data | HallCtrl 响应 |
+|------|------|--------------|
+| `WAITING` | `{ readyCount, aiSeconds }` | 更新等待人数/倒计时 label |
+| `ROOM` | `{ players[], roomCode, isOwner }` | 更新席位列表/房间码/按钮 |
+| `GAME_STARTED` | `{}` | 淡出 MatchView → `director.loadScene('GameScene')` |
+
+### 调用链
+
+```
+HallCtrl.onQuickMatchClick()
+  → this._hallMgr.startQuickMatch()     ← Ctrl 调 Mgr
+        → netManager.joinRoom(...)       ← Mgr 调网络
+        → 收到 WAITING_UPDATE
+        → this.onRender?.('WAITING', {readyCount, aiSeconds})  ← 回调通知
+  HallCtrl._render('WAITING', data)
+        → this._readyCountLabel.string = `${data.readyCount}/5 人已加入`  ← 只在 Ctrl 动节点
+```
+
+### 架构 AC
+
+- AC-arch-1: `ui/view/LaunchView.ts` 已删除（`git rm`）
+- AC-arch-2: `ui/view/HallView.ts` 已删除（`git rm`）
+- AC-arch-3: `logic/HallMgr.ts` 无 `import { * } from 'cc'`，无 `oops.*`（toast 除外）
+- AC-arch-4: `HallCtrl` 的 `message.on` 处理函数内无 `if/switch` 业务判断，均委托 `_hallMgr`
+- AC-arch-5: 测试文件 `LaunchView.test.ts` → `LaunchMgr.test.ts`，`HallView.test.ts` → `HallMgr.test.ts`，`npx jest` 全绿
 
 ---
 

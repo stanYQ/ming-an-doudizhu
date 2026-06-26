@@ -11,18 +11,33 @@
 ## 执行流程
 
 ```
-Step 1  认领 → 更新 .tasks/in-progress.md
+Step 0  认领 → 更新 .tasks/in-progress.md
+
+Step 1  架构清理（UI 搭建前完成）
+        → 扩充 logic/SettlementLogic.ts，吸收 SettlementView.ts 的业务：
+            leaveRoom(net) + navigateToHall() 决策
+            navigateToQuickMatch() 决策
+            startCountdown(seconds): number (返回 handle，不操作节点)
+            clearCountdown(handle): void
+            onRematchTimeout(): 'wait' | 'leave'  (纯返回状态，不操作节点)
+        → git rm ui/view/SettlementView.ts
+        → SettlementView 节点由 GameCtrl._render 驱动渲染
+        → 迁移测试：SettlementView.test.ts → SettlementLogic.test.ts
+        → npx jest 全绿
 
 Step 2  搭建 SettlementView 节点树
         → 全屏遮罩 + 胜负横幅 + 5张玩家卡片 + 倍率明细 + 操作按钮
+        → 节点是纯渲染容器，CC Button ClickEvents 指向 GameCtrl 方法
 
 Step 3  实现 PlayerResultCard Prefab
 
 Step 4  实现身份揭晓动画（identity_reveal）
 
 Step 5  实现结算入场动画序列
+        → 动画逻辑在 GameCtrl._render('OVER', msg) 中实现
 
 Step 6  接入消息：game_over / identity_reveal / rematch_update / rematch_redirect / rematch_start
+        → GameMgr 收消息 → onRender 通知 → GameCtrl._render 渲染
 
 Step 7  /verify
         → 跑完一局，进入结算界面
@@ -31,6 +46,45 @@ Step 7  /verify
 
 Step 8  完成 → 更新 .tasks/done.md
 ```
+
+---
+
+## 架构说明
+
+SettlementView 节点是纯渲染容器，**不挂业务脚本**。
+
+```
+GameMgr._onGameOver(msg)
+  → this.onRender?.('OVER', msg)
+GameCtrl._render('OVER', msg)
+  → this._settlementOverlay.active = true
+  → tween(...)  ← 动画在 Ctrl 里
+  → countdown = this._settlementLogic.startCountdown(30, () => {
+        this._mgr.returnToHall()  ← 归零时调 Mgr
+    })
+
+GameCtrl.onRematchBtnClick()
+  → this._mgr.requestRematch()
+GameCtrl.onBackHallBtnClick()
+  → this._mgr.returnToHall()
+```
+
+### 扩充后的 SettlementLogic 接口
+
+```typescript
+export class SettlementLogic {
+    requestRematch(net: NetManager): void
+    leaveRoom(net: NetManager): Promise<void>
+    // 新增
+    startCountdown(seconds: number, onExpire: () => void): ReturnType<typeof setInterval>
+    clearCountdown(handle: ReturnType<typeof setInterval>): void
+    buildResultText(winnerCamp: string): string   // '平民阵营胜利！' | '地主阵营胜利！'
+}
+```
+
+- AC-arch-8: `ui/view/SettlementView.ts` 已删除
+- AC-arch-9: SettlementView 节点区无挂业务脚本，CC Button ClickEvents 指向 GameCtrl 方法
+- AC-arch-10: `logic/SettlementLogic.ts` 无 `import { * } from 'cc'`，无 `oops.*`
 
 ---
 

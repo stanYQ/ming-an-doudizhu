@@ -11,25 +11,56 @@
 ## 执行流程
 
 ```
-Step 1  认领 → 更新 .tasks/in-progress.md
+Step 0  认领 → 更新 .tasks/in-progress.md
+
+Step 1  架构清理（UI 搭建前完成）
+        → MatchView.ts 的业务（joinRoom/leaveRoom/导航/业务判断）
+          已在 TASK-041 移入 logic/HallMgr.ts，此处确认：
+            grep -r "joinRoom\|leaveRoom\|_navigate" ui/view/MatchView.ts  # 应无输出（已删）
+        → git rm ui/view/MatchView.ts（若 TASK-041 未删，此处删）
+        → MatchView 节点由 HallCtrl._render 驱动渲染（无独立业务脚本）
+        → 迁移测试：MatchView.test.ts → MatchLogic.test.ts
+          更新测试：测试对象改为 HallMgr 的匹配行为
+        → npx jest 全绿
 
 Step 2  搭建 MatchView 节点树（弹层，挂在 HallScene Canvas 下）
         → 快速匹配模式 + 好友房模式共用同一节点树，按 mode 切换显示
+        → 节点仅是 CC 渲染容器，不挂业务脚本
 
-Step 3  挂载脚本 + 填写节点引用
+Step 3  HallCtrl 填写 MatchView 节点引用
+        → 在 @property 中添加 MatchView 子节点引用
+        → HallCtrl._render 中处理 'WAITING' / 'ROOM' / 'GAME_STARTED' 事件
 
 Step 4  实现等待动画（3点跳动）
+        → startDotsAnim() 在 HallCtrl 内实现，由 _render('WAITING') 触发
 
-Step 5  接入消息：waiting_update / room_update / game_started
-
-Step 6  /verify
+Step 5  /verify
         → 服务端启动（AI_FILL_DELAY=1 AUTH_MODE=stub）
         → 点击快速匹配，观察等待室倒计时和 AI 补位流程
         → 点击好友房，观察房间码显示和席位列表
         → 对照 AC 逐条目视确认
 
-Step 7  完成 → 更新 .tasks/done.md
+Step 6  完成 → 更新 .tasks/done.md
 ```
+
+---
+
+## 架构说明
+
+MatchView 节点是纯渲染容器，**不挂业务脚本**。所有业务在 HallMgr（TASK-041 建立）：
+
+```
+HallCtrl.onQuickMatchClick()
+  → this._hallMgr.startQuickMatch()
+        服务端推 waiting_update
+        → onRender?.('WAITING', { readyCount, aiSeconds })
+  HallCtrl._render('WAITING', data)
+        this._readyCountLabel.string = `${data.readyCount}/5 人已加入`
+        this._aiLabel.string = data.aiSeconds > 0 ? `${data.aiSeconds}秒后AI补位` : 'AI补位中…'
+```
+
+- AC-arch-6: `ui/view/MatchView.ts` 已删除
+- AC-arch-7: MatchView 节点区无挂业务脚本，CC Button ClickEvents 指向 HallCtrl 方法
 
 ---
 
