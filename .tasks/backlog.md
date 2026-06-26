@@ -85,6 +85,10 @@
 
 ## P5 任务（UI 视觉搭建，core 已验证）
 
+### P5.0 前置 — 架构迁移（TASK-041 开始前必须完成）
+
+- [ ] TASK-049 [client] Phase 1 架构迁移：GameController → GameMgr（脱CC壳，三层职责厘清）→ spec: specs/arch-phase1-gamemgr.md **[ready]**
+
 ### P5.0 — oops-framework 集成 + 场景骨架
 
 - [ ] TASK-041 [client] LaunchScene + HallScene 节点树搭建 + AppRoot 初始化 + oops.res/storage 接入 → spec: specs/ui-flow-01-launch-hall.md **[ready]**
