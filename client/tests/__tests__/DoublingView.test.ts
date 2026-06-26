@@ -1,4 +1,4 @@
-import { DoublingView, DoublingStartMsg, LandlordDoubledMsg, DoublingResultMsg } from '../ui/DoublingView';
+import { DoublingView, DoublingStartMsg, LandlordDoubledMsg, DoublingResultMsg } from '../ui/view/DoublingView';
 
 // ---- 构造辅助 ----
 function makeView(mySeat = 0) {

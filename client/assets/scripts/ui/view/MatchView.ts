@@ -142,6 +142,11 @@ export class MatchView {
     this._cancelBtn.interactable = false;
   }
 
+  /** HallCtrl._onState 委托：处理 phase 变化（AC-20/21）。 */
+  onStateChange(state: { phase: string }): void {
+    if (state.phase === 'dealing') this.onGameStarted();
+  }
+
   // ─── 好友房 — 创建 ───────────────────────────────────────────────────────
 
   /**

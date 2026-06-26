@@ -1,7 +1,7 @@
 jest.mock('cc', () => require('../__mocks__/cc'));
 jest.mock('db://oops-framework/core/Oops', () => ({ oops: {} }));
 
-import { CodeCardSelector, CodeCardChoice } from '../ui/CodeCardSelector';
+import { CodeCardSelector, CodeCardChoice } from '../ui/view/CodeCardSelector';
 
 function makeSelector(): CodeCardSelector {
     const sel = new CodeCardSelector();

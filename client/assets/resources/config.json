@@ -1,0 +1,9 @@
+{
+  "localDataKey": "ddz",
+  "localDataIv": "ddz_iv_2024",
+  "bundleDefault": "common",
+  "frameRate": 60,
+  "stats": false,
+  "mobileSafeArea": false,
+  "gui": []
+}

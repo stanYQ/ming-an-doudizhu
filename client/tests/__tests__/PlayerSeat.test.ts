@@ -1,7 +1,7 @@
 jest.mock('cc', () => require('../__mocks__/cc'));
 jest.mock('db://oops-framework/core/Oops', () => ({ oops: {} }));
 
-import { PlayerSeat, SeatData } from '../ui/PlayerSeat';
+import { PlayerSeat, SeatData } from '../ui/view/PlayerSeat';
 
 function makeSeat(index = 0): PlayerSeat {
     const s = new PlayerSeat();

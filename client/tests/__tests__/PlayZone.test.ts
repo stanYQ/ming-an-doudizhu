@@ -1,7 +1,7 @@
 jest.mock('cc', () => require('../__mocks__/cc'));
 jest.mock('db://oops-framework/core/Oops', () => ({ oops: {} }));
 
-import { PlayZone } from '../ui/PlayZone';
+import { PlayZone } from '../ui/view/PlayZone';
 
 function makeZone(): PlayZone {
     const z = new PlayZone();

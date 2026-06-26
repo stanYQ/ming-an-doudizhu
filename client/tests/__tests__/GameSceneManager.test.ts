@@ -1,16 +1,14 @@
 /**
- * TASK-035: GameSceneManager 行为测试
+ * TASK-035: GameCtrl 行为测试
  * 覆盖 AC-1 / AC-6 / AC-7
  */
 
-// 'cc' 通过 moduleNameMapper 自动重定向到 tests/__mocks__/cc.ts，无需显式 jest.mock
 jest.mock('db://oops-framework/core/common/event/MessageManager', () => ({
     message: { on: jest.fn(), off: jest.fn(), dispatchEvent: jest.fn() },
 }));
-jest.mock('db://oops-framework/core/Oops', () => ({ oops: {} }));
-jest.mock('colyseus.js', () => ({ Client: jest.fn() }));
+jest.mock('db://oops-framework/core/Oops', () => ({ oops: { gui: { toast: jest.fn() } } }));
 
-// Mock netManager singleton — GameSceneManager 使用 private _net = netManager
+// Mock netManager singleton
 jest.mock('../net/NetManager', () => ({
     netManager: {
         room:   null as any,
@@ -19,43 +17,40 @@ jest.mock('../net/NetManager', () => ({
     },
 }));
 
-import { netManager }       from '../net/NetManager';
-import { GameSceneManager } from '../scenes/GameSceneManager';
+// Mock GameMgr — 验证 GameCtrl.onLoad() 正确委托给 _mgr
+const mockSetConnected = jest.fn();
+const mockMgrInit      = jest.fn();
+jest.mock('../logic/GameMgr', () => ({
+    GameMgr: jest.fn().mockImplementation(() => ({
+        setConnected: mockSetConnected,
+        init:         mockMgrInit,
+        destroy:      jest.fn(),
+        onRender:     null,
+    })),
+}));
+jest.mock('../logic/SettlementLogic', () => ({ SettlementLogic: jest.fn() }));
 
-// ── 基础 mock 对象 ────────────────────────────────────────────────────────────
+import { netManager } from '../net/NetManager';
+import { GameCtrl }   from '../ui/ctrl/GameCtrl';
 
-function makeGameController() {
-    return {
-        setConnected:   jest.fn(),
-        handCardView:   null as any,
-        playZone:       null as any,
-        playerSeats:    null as any,
-        codeCardSelector: null as any,
-        settlementView: null as any,
-        doublingView:   null as any,
-        netManager:     null as any,
-    };
-}
-
-/** 创建 GameSceneManager，覆盖所有私有 builder 方法避免 @property undefined 引用 */
+/** 创建 GameCtrl，覆盖所有私有 builder 方法避免 @property undefined 引用 */
 function makeManager() {
-    const manager = new GameSceneManager() as any;
+    const manager = new GameCtrl() as any;
     manager._buildHandCardView   = jest.fn(() => ({}));
     manager._buildPlayZone       = jest.fn(() => ({}));
     manager._buildSeats          = jest.fn(() => []);
     manager._buildCodeSelector   = jest.fn(() => ({}));
     manager._buildSettlementView = jest.fn(() => ({}));
     manager._buildDoublingView   = jest.fn(() => ({}));
-    manager.gameController       = makeGameController();
     return manager;
 }
 
 beforeEach(() => {
     jest.clearAllMocks();
-    // 每次测试前给 netManager 设置默认 client（模拟 HallScene 已 init）
+    mockSetConnected.mockReset();
+    mockMgrInit.mockReset();
     (netManager as any).client = { auth: { token: 'hall-token' } };
     (netManager as any).room   = null;
-    // 重置 init 为无副作用的 jest.fn
     (netManager.init as jest.Mock).mockReset();
 });
 
@@ -63,8 +58,8 @@ beforeEach(() => {
 // AC-1: onLoad() 从 netManager.room 获取 mySeatIndex + mySessionId 并调用 setConnected
 // ───────────────────────────────────────────────────────────────────────────
 
-test('TASK-035 AC-1: onLoad() 调用 gameController.setConnected(mySeatIndex, mySessionId)', () => {
-    // Arrange: room 已由 HallScene 建立，state.players 含本人席位信息
+test('TASK-035 AC-1: onLoad() 调用 _mgr.setConnected(mySeatIndex, mySessionId)', () => {
+    // Arrange: room 已由 HallCtrl 建立，state.players 含本人席位信息
     (netManager as any).room = {
         sessionId: 'player-sess-abc',
         state: {
@@ -75,28 +70,28 @@ test('TASK-035 AC-1: onLoad() 调用 gameController.setConnected(mySeatIndex, my
     const manager = makeManager();
     manager.onLoad();
 
-    expect(manager.gameController.setConnected).toHaveBeenCalledWith(3, 'player-sess-abc');
+    expect(mockSetConnected).toHaveBeenCalledWith(3, 'player-sess-abc');
 });
 
 test('TASK-035 AC-1b: room 为 null 时 setConnected 不调用（防止 crash）', () => {
     (netManager as any).room = null;
     const manager = makeManager();
     expect(() => manager.onLoad()).not.toThrow();
-    expect(manager.gameController.setConnected).not.toHaveBeenCalled();
+    expect(mockSetConnected).not.toHaveBeenCalled();
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// AC-6: GameSceneManager.onLoad() 不再调用 netManager.init()
+// AC-6: GameCtrl.onLoad() 不再调用 netManager.init()
 // ───────────────────────────────────────────────────────────────────────────
 
-test('TASK-035 AC-6: onLoad() 不调用 netManager.init()（singleton 已由 HallScene 初始化）', () => {
+test('TASK-035 AC-6: onLoad() 不调用 netManager.init()（singleton 已由 HallCtrl 初始化）', () => {
     const manager = makeManager();
     manager.onLoad();
     expect(netManager.init).not.toHaveBeenCalled();
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// AC-7: GameScene 加载后 netManager.client 仍是 HallScene 设置的同一实例
+// AC-7: GameScene 加载后 netManager.client 仍是 HallCtrl 设置的同一实例
 // ───────────────────────────────────────────────────────────────────────────
 
 test('TASK-035 AC-7: onLoad() 后 netManager.client 引用不变（未重新 init）', () => {

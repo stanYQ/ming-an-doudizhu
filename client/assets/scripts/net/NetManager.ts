@@ -15,7 +15,10 @@ function _colyseus(): any {
 
 export class NetManager {
     private client: any = null;
-    private room: any = null;
+    private _room: any = null;
+
+    /** 当前已加入的 Colyseus Room 实例，供 GameCtrl 读取席位信息。 */
+    get room(): any { return this._room; }
 
     /**
      * 初始化 Colyseus Client 实例（不发起连接）。
@@ -41,13 +44,13 @@ export class NetManager {
      * @param options 加入参数（token、mode、roomCode 等）
      */
     async joinRoom(name: string, options: any): Promise<void> {
-        this.room = await this.client.joinOrCreate(name, options);
+        this._room = await this.client.joinOrCreate(name, options);
         this._registerHandlers();
     }
 
     // 将 Colyseus room 消息路由到 oops EventManager，解耦 NetManager 与各 Controller
     private _registerHandlers() {
-        const r = this.room!;
+        const r = this._room!;
         r.onMessage('your_hand',       (msg: any) => message.dispatchEvent('HAND',            msg));
         r.onMessage('bottom_cards',    (msg: any) => message.dispatchEvent('BOTTOM_CARDS',    msg));
         r.onMessage('hint',            (msg: any) => message.dispatchEvent('HINT',            msg));
@@ -72,12 +75,12 @@ export class NetManager {
      * @param cards 要出的牌，0-107 编码整数数组
      */
     playCards(cards: number[]): void {
-        this.room?.send('play_cards', { cards });
+        this._room?.send('play_cards', { cards });
     }
 
     /** 发送 pass（不要）请求。 */
     pass(): void {
-        this.room?.send('pass');
+        this._room?.send('pass');
     }
 
     /**
@@ -86,17 +89,17 @@ export class NetManager {
      * @param value rank 编码，0=3 … 7=10
      */
     selectCodeCard(suit: number, value: number): void {
-        this.room?.send('select_code_card', { suit, value });
+        this._room?.send('select_code_card', { suit, value });
     }
 
     /** 断线重连后同步当前游戏状态。 */
     reconnectSync(): void {
-        this.room?.send('reconnect_sync');
+        this._room?.send('reconnect_sync');
     }
 
     /** 请求服务端发送出牌提示（合法牌型列表）。 */
     requestHint(): void {
-        this.room?.send('request_hint');
+        this._room?.send('request_hint');
     }
 
     /**
@@ -104,17 +107,17 @@ export class NetManager {
      * @param value 1=不加倍，2=加倍
      */
     setDouble(value: 1 | 2): void {
-        this.room?.send('set_double', { value });
+        this._room?.send('set_double', { value });
     }
 
     /** 房主发送强制开局（好友房 waiting 阶段）。 */
     forceStart(): void {
-        this.room?.send('force_start');
+        this._room?.send('force_start');
     }
 
     /** 发送再来一局请求（结算窗口期内）。 */
     requestRematch(): void {
-        this.room?.send('request_rematch');
+        this._room?.send('request_rematch');
     }
 
     /**
@@ -122,10 +125,10 @@ export class NetManager {
      * 用于取消匹配或结算后返回大厅。
      */
     async leaveRoom(): Promise<void> {
-        await this.room?.leave();
-        this.room = null;
+        await this._room?.leave();
+        this._room = null;
     }
 }
 
-/** 跨场景共享单例：HallScene 建立连接，GameScene 直接复用同一 room 引用。 */
+/** 全局单例：HallCtrl 建立连接，GameCtrl 复用同一 room 引用。 */
 export const netManager = new NetManager();

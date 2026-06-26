@@ -12,7 +12,7 @@ module.exports = {
     '^cc/env$':  '<rootDir>/tests/__mocks__/cc-env.ts',
     '^db://oops-framework/(.*)$': '<rootDir>/extensions/oops-plugin-framework/assets/$1',
     // 源码相对路径映射（test 文件里的 ../ui/X → assets/scripts/ui/X）
-    '^\\.\\./(ui|game|net|shared|core|scenes)/(.*)$': '<rootDir>/assets/scripts/$1/$2',
+    '^\\.\\./(ui|game|net|shared|core|scenes|logic)/(.*)$': '<rootDir>/assets/scripts/$1/$2',
   },
   globalTeardown: '<rootDir>/tests/teardown.js',
   transform: {

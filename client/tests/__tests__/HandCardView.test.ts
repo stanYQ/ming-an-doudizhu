@@ -1,7 +1,7 @@
 jest.mock('cc', () => require('../__mocks__/cc'));
 jest.mock('db://oops-framework/core/Oops', () => ({ oops: {} }));
 
-import { HandCardView } from '../ui/HandCardView';
+import { HandCardView } from '../ui/view/HandCardView';
 import { PatternType } from '../shared/CardPattern';
 
 // Card encoding helpers (3♠=0, 4♠=4, 5♠=8 ... 对应 rank 0-12 * 4 + suit)

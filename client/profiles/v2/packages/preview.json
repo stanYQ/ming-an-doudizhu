@@ -1,6 +1,4 @@
 {
   "__version__": "1.0.1",
-  "general": {
-    "start_scene": "119a659d-a658-410c-a554-e088d30f825d"
-  }
+  "general": {}
 }

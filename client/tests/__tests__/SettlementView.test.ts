@@ -1,7 +1,7 @@
 jest.mock('cc', () => require('../__mocks__/cc'));
 jest.mock('db://oops-framework/core/Oops', () => ({ oops: {} }));
 
-import { SettlementView, SettlementData, PlayerResult, BreakdownV2, GameOverMsg, RematchUpdateMsg } from '../ui/SettlementView';
+import { SettlementView, SettlementData, PlayerResult, BreakdownV2, GameOverMsg, RematchUpdateMsg } from '../ui/view/SettlementView';
 
 function makeView(): SettlementView {
     const v = new SettlementView();

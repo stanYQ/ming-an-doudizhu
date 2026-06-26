@@ -10,9 +10,10 @@
 
 ## 已完成
 
-- [x] TASK-041 [client] 架构清理部分 | 完成: client-dev | 测试: ✓ 全量绿（+LaunchLogic 8条 +HallLogic 12条）
+- [x] TASK-041 [client] 架构清理部分 | 完成: client-dev | 测试: ✓ 297/297（15 suites）
       产物（代码）: logic/LaunchLogic.ts + HallLogic.ts, ctrl/LaunchCtrl.ts + HallCtrl.ts, core/AppRoot.ts, resources/config.json
       rm: ui/view/LaunchView.ts + HallView.ts; 测试迁移: LaunchLogic.test.ts + HallLogic.test.ts
+      修复: GameSceneManager.test.ts 断言改为 _mgr.setConnected（适配三层架构）
       ⚠️ 待人工完成：Step 3 LaunchScene+HallScene 节点树搭建 / Step 4 挂脚本 @property / Step 6 Cocos Preview 验收 AC-1~15
 
 - [x] TASK-049 [client] 三层架构全面对齐 | 完成: client-dev | 测试: ✓ 42/42（GameMgr unit）| 产物: client/assets/scripts/logic/{GameMgr,HandLogic,SettlementLogic,LaunchLogic}.ts, client/assets/scripts/ui/ctrl/{GameCtrl,HallCtrl,LaunchCtrl}.ts, client/tests/__tests__/GameMgr.test.ts（git mv from GameController.test.ts）; git rm GameController.ts

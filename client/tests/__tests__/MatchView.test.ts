@@ -1,7 +1,7 @@
 jest.mock('cc', () => require('../__mocks__/cc'));
 jest.mock('db://oops-framework/core/Oops', () => ({ oops: {} }));
 
-import { MatchView, WaitingUpdateMsg, RoomUpdateMsg } from '../ui/MatchView';
+import { MatchView, WaitingUpdateMsg, RoomUpdateMsg } from '../ui/view/MatchView';
 
 function makeView() {
     const v = new MatchView();
