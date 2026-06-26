@@ -33,6 +33,81 @@
 
 ---
 
+## 架构分层（灵魂准则，不可违反）
+
+> 权威来源：`specs/adr-client-arch.md`。每条规则可机械 grep 检查，违反 = 立即修复，不得提交。
+
+### 三层结构
+
+```
+Ctrl 层  →  GameMgr  →  Logic 层
+  │               │            │
+CC Component    纯TS单例     纯TS模块
+只渲染/注入    唯一调用入口  业务/状态机
+```
+
+### 层定义
+
+| 层 | 目录 | 文件命名 | 是否可 import 'cc' |
+|----|------|---------|-------------------|
+| **Ctrl** | `ui/ctrl/` `scenes/` | `*Ctrl.ts` `*SceneManager.ts` | ✅ 必须 |
+| **GameMgr** | `logic/` | `GameMgr.ts` | ❌ 禁止 |
+| **Logic** | `logic/` `ui/view/` | `*Logic.ts` 或原 `*View.ts` | ❌ 禁止 |
+| **Manager** | `net/` `core/` | `*Manager.ts` | ❌ 禁止 |
+
+### 调用规则
+
+```
+Ctrl.onXxxClick()
+  └→ this._mgr.onXxxClick()          ← Ctrl 只能调 GameMgr，不能绕过
+        └→ this.handLogic.xxx()       ← GameMgr 委托子 Logic
+              └→ callback / oops.message  ← Logic 通知 Ctrl 渲染，不持有 Ctrl 引用
+```
+
+- Ctrl → GameMgr：直接调用 ✅
+- GameMgr → Logic：直接调用 ✅
+- Logic → Ctrl：`onRenderNeeded` callback 或 `oops.message.emit` ✅
+- Ctrl 跳过 GameMgr 直接持 Logic 实例：❌ 立即修
+- Logic 持有 Ctrl 引用：❌ 立即修
+
+### 硬红线 grep（每次 commit 前必跑）
+
+```bash
+# 输出必须为空，否则不得提交
+grep -r "from 'cc'" client/assets/scripts/logic/
+grep -r "from 'cc'" client/assets/scripts/ui/view/
+```
+
+### 新文件归层决策树
+
+```
+需要 @property / extends Component？
+  是 → Ctrl 层   ui/ctrl/   @layer ctrl
+  否 → 需要 Jest 测业务逻辑？
+        是 → Logic 层  logic/   @layer logic
+        否 → 全局单例  → net/ 或 core/
+```
+
+### 文件头强制格式（新文件必须包含 @layer）
+
+```typescript
+/**
+ * @file XxxLogic.ts
+ * @description ...
+ * @layer logic        ← 值为 logic | ctrl | manager，缺失 = 未完成
+ * @module client/logic
+ */
+```
+
+### 当前 Phase 1 迁移任务（TASK-041 开始前完成）
+
+`game/GameController.ts` 是唯一混层文件（CC Component + Logic）：
+- 去掉 `extends Component` / `@ccclass` → 重命名为 `logic/GameMgr.ts`
+- `ui/ctrl/GameCtrl.ts` 改为 `private _mgr = new GameMgr()` 持有它
+- 详见 `specs/adr-client-arch.md` Phase 1 章节
+
+---
+
 ## 我的文件边界
 
 ```
@@ -42,10 +117,12 @@ client/assets/
 │   ├── hall/        <- 大厅分包
 │   └── game/        <- 游戏桌分包
 └── scripts/
-    ├── core/        <- oops-framework 封装
-    ├── net/         <- NetManager
-    ├── game/        <- 游戏逻辑控制器
-    ├── ui/          <- FairyGUI 界面控制器
+    ├── core/        <- oops-framework 根组件
+    ├── net/         <- NetManager（Manager 层）
+    ├── logic/       <- GameMgr + 子 Logic（Logic 层，零 CC 依赖）
+    ├── ui/
+    │   ├── ctrl/    <- CC Component Ctrl（Ctrl 层）
+    │   └── view/    <- 旧 Logic 文件（过渡期保留，等同 logic/ 层规则）
     └── shared/      <- 只读！不改！
 ```
 
@@ -95,7 +172,7 @@ enum ClientGameState {
 }
 ```
 
-状态由服务端 `GameState.phase` 驱动，在 `GameController.onStateChange()` 中响应。
+状态由服务端 `GameState.phase` 驱动，在 `GameMgr.onStateChange()` 中响应（Phase 1 迁移后）。
 
 ---
 
