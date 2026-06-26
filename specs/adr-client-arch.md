@@ -158,6 +158,22 @@ grep -r "from 'cc'" client/assets/scripts/ui/view/
 grep -r "oops\." client/assets/scripts/logic/
 ```
 
+### 场景导航规则（硬规定）
+
+本项目为多场景架构，`AppRoot` 的 `config.json` 中 `gui: []`（LayerManager 层未初始化）。
+
+| 操作 | 正确 | 禁止 |
+|------|------|------|
+| 场景跳转 | `director.loadScene('HallScene')` | `oops.gui.open(UIId.Hall)` |
+| 错误提示 | `oops.gui.toast(msg)` | 手写 Label 节点 |
+| 弹层/面板 | `node.active = true/false` | `oops.gui.open/remove` |
+
+```bash
+# 红线：Ctrl/Logic 不得使用 oops.gui.open / oops.gui.remove
+grep -r "oops\.gui\.open\|oops\.gui\.remove" client/assets/scripts/ui/
+grep -r "oops\.gui\.open\|oops\.gui\.remove" client/assets/scripts/logic/
+```
+
 ### 方法命名边界
 
 | 层 | 允许命名 | 禁止命名 |

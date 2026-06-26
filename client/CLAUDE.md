@@ -87,12 +87,24 @@ Ctrl.onPlayBtnClick()
 - Logic 持有 UI / 调 oops.xxx：❌ 立即修
 - GameMgr 持有 UI 对象：❌ 立即修
 
+### 场景导航规则
+
+`AppRoot` 的 `config.json` 中 `gui: []`，LayerManager 未初始化：
+
+| 操作 | 用法 |
+|------|------|
+| 场景跳转 | `director.loadScene('HallScene')` ✅ |
+| 错误提示 | `oops.gui.toast(msg)` ✅ |
+| 弹层显隐 | `node.active = true/false` ✅ |
+| **禁止** | `oops.gui.open()` / `oops.gui.remove()` ❌ 静默无效 |
+
 ### 硬红线 grep（每次 commit 前必跑）
 
 ```bash
 # 输出必须为空，否则不得提交
 grep -r "from 'cc'" client/assets/scripts/logic/
 grep -r "from 'cc'" client/assets/scripts/ui/view/
+grep -r "oops\.gui\.open\|oops\.gui\.remove" client/assets/scripts/
 ```
 
 ### 新文件归层决策树
