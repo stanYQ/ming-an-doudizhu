@@ -51,9 +51,12 @@ CC Component    纯TS单例     纯TS模块
 | 层 | 目录 | 文件命名 | 是否可 import 'cc' |
 |----|------|---------|-------------------|
 | **Ctrl** | `ui/ctrl/` `scenes/` | `*Ctrl.ts` `*SceneManager.ts` | ✅ 必须 |
-| **GameMgr** | `logic/` | `GameMgr.ts` | ❌ 禁止 |
-| **Logic** | `logic/` `ui/view/` | `*Logic.ts` 或原 `*View.ts` | ❌ 禁止 |
+| **GameMgr** | `logic/` | `GameMgr.ts`（唯一 Mgr，游戏场景总入口） | ❌ 禁止 |
+| **Logic** | `logic/` | `*Logic.ts`（其余全部，含场景级和子模块） | ❌ 禁止 |
 | **Manager** | `net/` `core/` | `*Manager.ts` | ❌ 禁止 |
+
+> **命名规则**：`logic/` 目录下除 `GameMgr.ts` 外，所有文件统一使用 `*Logic.ts` 后缀。
+> 例：`HallLogic.ts`、`LaunchLogic.ts`、`HandLogic.ts`、`SettlementLogic.ts`。
 
 ### 职责边界
 
@@ -113,12 +116,18 @@ grep -r "from 'cc'" client/assets/scripts/ui/view/
  */
 ```
 
-### 当前 Phase 1 迁移任务（TASK-041 开始前完成）
+### logic/ 命名规则（强制）
 
-`game/GameController.ts` 是唯一混层文件（CC Component + Logic）：
-- 去掉 `extends Component` / `@ccclass` → 重命名为 `logic/GameMgr.ts`
-- `ui/ctrl/GameCtrl.ts` 改为 `private _mgr = new GameMgr()` 持有它
-- 详见 `specs/adr-client-arch.md` Phase 1 章节
+```
+logic/
+├── GameMgr.ts          ← 唯一 Mgr，游戏场景总入口
+├── HallLogic.ts        ← Hall 场景协调器
+├── LaunchLogic.ts      ← Launch 场景协调器（git mv LaunchMgr.ts）
+├── HandLogic.ts        ← 手牌纯业务
+└── SettlementLogic.ts  ← 结算纯业务
+```
+
+新建文件时：除 `GameMgr.ts` 外，`logic/` 目录内所有文件必须以 `Logic.ts` 结尾。
 
 ---
 
@@ -133,7 +142,7 @@ client/assets/
 └── scripts/
     ├── core/        <- oops-framework 根组件
     ├── net/         <- NetManager（Manager 层）
-    ├── logic/       <- GameMgr + 子 Logic（Logic 层，零 CC 依赖）
+    ├── logic/       <- GameMgr（唯一入口）+ *Logic（零 CC 依赖）
     ├── ui/
     │   ├── ctrl/    <- CC Component Ctrl（Ctrl 层）
     │   └── view/    <- 旧 Logic 文件（过渡期保留，等同 logic/ 层规则）

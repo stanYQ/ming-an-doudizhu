@@ -15,12 +15,12 @@ Step 0  认领 → 更新 .tasks/in-progress.md
 
 Step 1  架构清理（UI 搭建前完成）
         → MatchView.ts 的业务（joinRoom/leaveRoom/导航/业务判断）
-          已在 TASK-041 移入 logic/HallMgr.ts，此处确认：
+          已在 TASK-041 移入 logic/HallLogic.ts，此处确认：
             grep -r "joinRoom\|leaveRoom\|_navigate" ui/view/MatchView.ts  # 应无输出（已删）
         → git rm ui/view/MatchView.ts（若 TASK-041 未删，此处删）
         → MatchView 节点由 HallCtrl._render 驱动渲染（无独立业务脚本）
         → 迁移测试：MatchView.test.ts → MatchLogic.test.ts
-          更新测试：测试对象改为 HallMgr 的匹配行为
+          更新测试：测试对象改为 HallLogic 的匹配行为
         → npx jest 全绿
 
 Step 2  搭建 MatchView 节点树（弹层，挂在 HallScene Canvas 下）
@@ -47,7 +47,7 @@ Step 6  完成 → 更新 .tasks/done.md
 
 ## 架构说明
 
-MatchView 节点是纯渲染容器，**不挂业务脚本**。所有业务在 HallMgr（TASK-041 建立）：
+MatchView 节点是纯渲染容器，**不挂业务脚本**。所有业务在 HallLogic（TASK-041 建立）：
 
 ```
 HallCtrl.onQuickMatchClick()

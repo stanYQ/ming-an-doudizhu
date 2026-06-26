@@ -14,13 +14,13 @@
 Step 0  认领 → 更新 .tasks/in-progress.md
 
 Step 1  架构清理（UI 搭建前必须完成）
-        → 新建 logic/HallMgr.ts（见「架构清理」章节）
-        → 扩充 logic/LaunchMgr.ts，吸收 LaunchView.ts 的业务逻辑
-        → 重写 ui/ctrl/LaunchCtrl.ts，调 LaunchMgr 决策，持有节点
-        → 重写 ui/ctrl/HallCtrl.ts，调 HallMgr，注册 onRender
+        → 新建 logic/HallLogic.ts（见「架构清理」章节）
+        → 扩充 logic/LaunchLogic.ts，吸收 LaunchView.ts 的业务逻辑
+        → 重写 ui/ctrl/LaunchCtrl.ts，调 LaunchLogic 决策，持有节点
+        → 重写 ui/ctrl/HallCtrl.ts，调 HallLogic，注册 onRender
         → git rm ui/view/LaunchView.ts ui/view/HallView.ts
-        → 迁移测试：LaunchView.test.ts → LaunchMgr.test.ts
-                    HallView.test.ts   → HallMgr.test.ts
+        → 迁移测试：LaunchView.test.ts → LaunchLogic.test.ts
+                    HallView.test.ts   → HallLogic.test.ts
         → npx jest 全绿
 
 Step 2  oops Root 初始化（本任务独有，后续 TASK 复用）
@@ -53,11 +53,11 @@ Step 7  完成
 
 ## 架构清理（Step 1 详情）
 
-### logic/HallMgr.ts — 公开接口
+### logic/HallLogic.ts — 公开接口
 
 ```typescript
 // @layer logic
-export class HallMgr {
+export class HallLogic {
     onRender?: (event: string, data: unknown) => void;
 
     init(): void       // 注册 WAITING_UPDATE / ROOM_UPDATE / STATE 消息
@@ -96,9 +96,9 @@ HallCtrl.onQuickMatchClick()
 
 - AC-arch-1: `ui/view/LaunchView.ts` 已删除（`git rm`）
 - AC-arch-2: `ui/view/HallView.ts` 已删除（`git rm`）
-- AC-arch-3: `logic/HallMgr.ts` 无 `import { * } from 'cc'`，无 `oops.*`（toast 除外）
+- AC-arch-3: `logic/HallLogic.ts` 无 `import { * } from 'cc'`，无 `oops.*`（toast 除外）
 - AC-arch-4: `HallCtrl` 的 `message.on` 处理函数内无 `if/switch` 业务判断，均委托 `_hallMgr`
-- AC-arch-5: 测试文件 `LaunchView.test.ts` → `LaunchMgr.test.ts`，`HallView.test.ts` → `HallMgr.test.ts`，`npx jest` 全绿
+- AC-arch-5: 测试文件 `LaunchView.test.ts` → `LaunchLogic.test.ts`，`HallView.test.ts` → `HallLogic.test.ts`，`npx jest` 全绿
 
 ---
 
