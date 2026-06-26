@@ -294,13 +294,13 @@ HallScene (Scene)
 // 使用 oops.res.loadBundle 预加载分包，进度驱动进度条（真实加载）
 async onLoad() {
   // 先加载 hall 分包（进入大厅前必须完成）
-  await oops.res.loadBundle('hall');
+  await oops.res.loadBundle('game');   // 主包已含 Hall 资产，此处加载 game 包（牌图等重资源）
   this._runProgress();
 }
 
 private _runProgress() {
   // 预加载 game 分包（后台进行，不阻塞进度条）
-  oops.res.loadBundle('game');
+  // game 包已在 Step 1 同步加载完毕，无需再次加载
 
   // 模拟进度（hall 已完成 → game 后台加载中）
   let progress = 0;

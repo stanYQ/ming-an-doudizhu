@@ -148,9 +148,9 @@ logic/
 ```
 client/assets/
 ├── bundle/
-│   ├── common/      <- 公共资源
-│   ├── hall/        <- 大厅分包
-│   └── game/        <- 游戏桌分包
+│   └── game/        <- 游戏桌分包（唯一子包，LaunchScene 启动时预加载）
+│                       包含：GameScene + 108张牌图 + 游戏桌 Prefab
+├── prefabs/         <- 主包 Prefab（Hall/Launch 界面用）
 └── scripts/
     ├── core/        <- oops-framework 根组件
     ├── net/         <- NetManager（Manager 层）

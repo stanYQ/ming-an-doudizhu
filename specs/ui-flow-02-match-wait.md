@@ -150,7 +150,7 @@ MatchView (Node W1280×H720, active=false)
 
 ## Prefab：SeatItem
 
-**路径**: `assets/bundle/hall/prefabs/SeatItem.prefab`  
+**路径**: `assets/prefabs/SeatItem.prefab`（主包，无需 loadBundle）
 **尺寸**: W560×H52
 
 ```
@@ -230,14 +230,14 @@ startDotsAnim() {
 
 | 功能 | 当前 | oops 用法 |
 |------|------|----------|
-| SeatItem Prefab 加载 | `bundle.load('prefabs/SeatItem', Prefab, cb)` | `await oops.res.load('hall', 'prefabs/SeatItem', Prefab)` |
+| SeatItem Prefab 加载 | `bundle.load('prefabs/SeatItem', Prefab, cb)` | `await oops.res.load('prefabs/SeatItem', Prefab)`（主包，不传 bundle 名）|
 | Toast（已复制） | 手写 Tween | 手写 Tween（P0，见 TASK-041 说明） |
 | 消息总线 | `message.on/off` | 已使用，保持不变 |
 
 ```typescript
 // MatchView.ts — SeatItem prefab 初始化（在 onLoad 调用一次）
 private async _loadSeatItemPrefab() {
-  this._seatItemPrefab = await oops.res.load('hall', 'prefabs/SeatItem', Prefab);
+  this._seatItemPrefab = await oops.res.load('prefabs/SeatItem', Prefab);  // 主包资源
   // 预实例化 5 个
   for (let i = 0; i < 5; i++) {
     const node = instantiate(this._seatItemPrefab);
