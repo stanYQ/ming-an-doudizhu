@@ -68,6 +68,15 @@ Ctrl（渲染/更新节点）
 - Logic → Ctrl：callback 或 oops.message，禁止持有 Ctrl 引用 ✅
 - Ctrl 不能绕过 GameMgr 直接持有 Logic 实例 ❌
 
+### 方法命名边界
+
+| 层 | 允许的命名风格 | 禁止的命名风格 |
+|----|-------------|-------------|
+| Ctrl | `onPlayBtnClick()` `onPassBtnClick()` `onXxxClick/Tap/Btn` | 业务意图词汇 |
+| GameMgr / Logic | `requestPlay()` `requestPass()` `returnToHall()` `setDouble()` | `on*Click` `on*Tap` `on*Btn` |
+
+> `on*Click` 类名字代表 UI 事件，只能活在 Ctrl 层。Logic 层只认业务意图。
+
 ---
 
 ## 防漂移护栏（Anti-Drift Guardrails）
@@ -195,22 +204,15 @@ private _mgr!: GameMgr;
 
 onLoad() {
     this._mgr = new GameMgr();
-
-    // 注册渲染回调：Logic 通知 Ctrl 更新节点
-    this._mgr.onRenderNeeded = (event, data) => this._render(event, data);
-
-    // 把节点引用注入子 Logic（替代原来的属性注入）
-    this._mgr.handLogic.init({
-        playButton:   this.playButton,
-        patternLabel: this.patternLabel,
-    });
-    this._mgr.settlementLogic.init({
-        rootNode:    this.settlementRoot,
-        bannerLabel: this.bannerLabel,
-        // ...
-    });
-
-    this._mgr.init(netManager);
+    // 把节点引用注入（替代原来的属性注入）
+    this._mgr.handCardView     = this._buildHandCardView();
+    this._mgr.playZone         = this._buildPlayZone();
+    this._mgr.playerSeats      = this._buildSeats();
+    this._mgr.codeCardSelector = this._buildCodeSelector();
+    this._mgr.settlementView   = this._buildSettlementView();
+    this._mgr.doublingView     = this._buildDoublingView();
+    this._mgr.netManager       = netManager;
+    this._mgr.init();
 
     const room = netManager.room;
     if (room) {
@@ -218,10 +220,16 @@ onLoad() {
         this._mgr.setConnected((myPlayer?.seatIndex as number) ?? -1, room.sessionId as string);
     }
 }
-onDestroy()            { this._mgr.destroy(); }
-onPlayButtonClick()    { this._mgr.onPlayButtonClick(); }
-onPassButtonClick()    { this._mgr.onPassButtonClick(); }
-// ... 其余按钮代理不变
+onDestroy() { this._mgr.destroy(); }
+
+// ── Button 事件代理（on*Click 只在 Ctrl，Logic 用业务意图命名）────────────
+onPlayBtnClick()       { this._mgr.requestPlay(); }
+onPassBtnClick()       { this._mgr.requestPass(); }
+onPlayAgainClick()     { this._mgr.requestRematch(); }
+onReturnHallClick()    { this._mgr.returnToHall(); }
+onConfirmCodeClick()   { this._mgr.confirmCodeCard(); }
+onSingleBtnClick()     { this._mgr.setDouble(1); }
+onDoubleBtnClick()     { this._mgr.setDouble(2); }
 ```
 
 ### Phase 2 — 视图文件重命名（按 TASK 顺序，不提前）
