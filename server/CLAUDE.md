@@ -82,6 +82,46 @@ shared/                      <- 我负责实现和维护
 
 ---
 
+## 注释红线（覆盖全局"不加注释"原则）
+
+> 全局 CLAUDE.md 的"不加注释"规则**在此目录不适用**。server/ 和 shared/ 的所有 .ts 文件必须按以下规范写注释，**缺注释 = 未完成**。
+
+**1. 文件头（每个 .ts 文件必须有）**
+```typescript
+/**
+ * @file 文件名.ts
+ * @description 这个文件做什么，属于哪个层（shared/server/infra）
+ * @module 模块名（如 shared, CardRoom, RuleEngine）
+ */
+```
+
+**2. public 函数 JSDoc**
+```typescript
+/**
+ * 判断 challenger 是否能压过 current。
+ * @param challenger 挑战方牌型
+ * @param current 当前桌面牌型
+ * @returns true 表示可以压，false 表示不能
+ */
+export function canBeat(challenger: CardPattern, current: CardPattern): boolean
+```
+
+**3. 业务规则内联注释**（非直觉 / 来自 GAME-RULES.md 的规则）
+```typescript
+// 3张王不构成任何特殊牌型，必须拆开单出（GAME-RULES.md D-05）
+// 双大王炸无敌，任何牌型都无法压制
+```
+
+**4. WHY 注释**（约束来源不明显时）
+```typescript
+// 手牌绝不入 Schema —— Schema 是公开广播的，入了等于告诉所有人手牌
+private hands = new Map<string, number[]>();
+```
+
+**不需要写**：显而易见的赋值、测试文件里的辅助函数、重复函数签名的注释。
+
+---
+
 ## 服务端权威原则（最高优先级）
 
 ```

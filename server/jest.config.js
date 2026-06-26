@@ -8,9 +8,9 @@ module.exports = {
     'src/**/*.ts',
     '!**/*.d.ts',
   ],
-  globals: {
-    'ts-jest': {
-      tsconfig: '<rootDir>/tsconfig.json',
-    },
+  transform: {
+    '^.+\\.tsx?$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.json' }],
   },
+  // 集成测试绑定真实端口，串行跑避免 worker 竞争 + 三方库 timer 未 unref 的 force exit（BUG-003）
+  maxWorkers: 1,
 };

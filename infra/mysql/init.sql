@@ -16,29 +16,34 @@ CREATE TABLE users (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE game_records (
-  id           BIGINT PRIMARY KEY AUTO_INCREMENT,
-  room_id      VARCHAR(32)  NOT NULL,
-  winner_camp  TINYINT      NOT NULL,
-  landlord_id  BIGINT       NOT NULL,
-  partner_id   BIGINT       NULL,
-  code_card    VARCHAR(16),
-  is_alone     TINYINT      NOT NULL DEFAULT 0,
-  first_out_id BIGINT       NOT NULL,
-  multiplier   INT          NOT NULL DEFAULT 1,
-  duration     INT          NOT NULL,
-  created_at   DATETIME     DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_landlord (landlord_id),
-  INDEX idx_created  (created_at)
+  id               BIGINT PRIMARY KEY AUTO_INCREMENT,
+  room_id          VARCHAR(32)  NOT NULL,
+  table_type       VARCHAR(16)  NOT NULL DEFAULT 'casual',
+  winner_camp      TINYINT      NOT NULL,
+  landlord_id      BIGINT       NOT NULL,
+  partner_id       BIGINT       NULL,
+  code_card        VARCHAR(16),
+  is_alone         TINYINT      NOT NULL DEFAULT 0,
+  first_out_id     BIGINT       NOT NULL,
+  multiplier       INT          NOT NULL DEFAULT 1,
+  landlord_double  TINYINT      NOT NULL DEFAULT 1,
+  duration         INT          NOT NULL,
+  created_at       DATETIME     DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_landlord  (landlord_id),
+  INDEX idx_created   (created_at),
+  INDEX idx_tabletype (table_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE game_players (
-  id          BIGINT PRIMARY KEY AUTO_INCREMENT,
-  record_id   BIGINT       NOT NULL,
-  user_id     BIGINT       NOT NULL,
-  role        VARCHAR(16)  NOT NULL,
-  rank_pos    TINYINT      NOT NULL,
-  score_delta INT          NOT NULL,
-  coin_delta  INT          NOT NULL DEFAULT 0,
+  id           BIGINT PRIMARY KEY AUTO_INCREMENT,
+  record_id    BIGINT       NOT NULL,
+  user_id      BIGINT       NOT NULL,
+  session_id   VARCHAR(64)  NOT NULL,
+  role         VARCHAR(16)  NOT NULL DEFAULT 'civilian',
+  rank_pos     TINYINT      NOT NULL,
+  score_delta  INT          NOT NULL,
+  double_value TINYINT      NOT NULL DEFAULT 1,
+  coin_delta   INT          NOT NULL DEFAULT 0,
   INDEX idx_user   (user_id),
   INDEX idx_record (record_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

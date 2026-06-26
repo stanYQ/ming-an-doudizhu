@@ -14,13 +14,13 @@
 |----|------|---------|------|
 | 游戏引擎 | Cocos Creator | Dashboard 安装 | 3.8 LTS |
 | 语言 | TypeScript | Cocos 内置 | 5.x |
-| UI 框架 | FairyGUI | Cocos 插件市场 | latest |
+| UI | Cocos Creator 原生 UI | 引擎内置（Label/Sprite/Layout/Widget） | 3.8 内置 |
 | 框架 | oops-framework | GitHub 导入 | latest |
-| 网络 | Colyseus.js Client | `npm install colyseus.js` | 0.15+ |
+| 网络 | Cocos.js Client | `npm install colyseus.js` | 0.15+ |
 
 **禁止引入的替代方案**（不论理由）：
 - ✗ LayaAir / Egret / Unity WebGL（替代 Cocos Creator）
-- ✗ UGUI / FGUI 其他版本（替代 FairyGUI）
+- ✗ FairyGUI / UGUI（外部 UI 框架，统一用 CC 原生 UI）
 - ✗ Socket.io-client（替代 colyseus.js）
 - ✗ Vue / React / 任何 Web 框架（Cocos 有自己的 UI 体系）
 
@@ -33,19 +33,131 @@
 
 ---
 
+## 架构分层（灵魂准则，不可违反）
+
+> 权威来源：`specs/adr-client-arch.md`。每条规则可机械 grep 检查，违反 = 立即修复，不得提交。
+
+### 三层结构
+
+```
+Ctrl 层  →  GameMgr  →  Logic 层
+  │               │            │
+CC Component    纯TS单例     纯TS模块
+只渲染/注入    唯一调用入口  业务/状态机
+```
+
+### 层定义
+
+| 层 | 目录 | 文件命名 | 是否可 import 'cc' |
+|----|------|---------|-------------------|
+| **Ctrl** | `ui/ctrl/` `scenes/` | `*Ctrl.ts` `*SceneManager.ts` | ✅ 必须 |
+| **GameMgr** | `logic/` | `GameMgr.ts`（唯一 Mgr，游戏场景总入口） | ❌ 禁止 |
+| **Logic** | `logic/` | `*Logic.ts`（其余全部，含场景级和子模块） | ❌ 禁止 |
+| **Manager** | `net/` `core/` | `*Manager.ts` | ❌ 禁止 |
+
+> **命名规则**：`logic/` 目录下除 `GameMgr.ts` 外，所有文件统一使用 `*Logic.ts` 后缀。
+> 例：`HallLogic.ts`、`LaunchLogic.ts`、`HandLogic.ts`、`SettlementLogic.ts`。
+
+### 职责边界
+
+| 层 | 能做 | 不能做 |
+|----|------|--------|
+| **Ctrl** | 持有 UI 视图 / 收集 UI 数据 / on*Click 代理 / 渲染节点 | 业务判断 / 调网络 |
+| **GameMgr** | 持有子Logic / 调 oops.gui.toast / oops.res / oops.storage / 接收 oops.message | 持有 UI 对象 / import 'cc' |
+| **Logic** | 纯业务计算 / 调 netManager 发请求 | UI 引用 / oops.xxx / import 'cc' |
+
+### 调用规则
+
+```
+Ctrl.onPlayBtnClick()
+  cards = this._handCardView.getSelectedCards()  ← 从自己持有的 UI 取数据
+  └→ this._mgr.requestPlay(cards)               ← 传数据值，不传 UI 对象
+        └→ this._handLogic.validate(cards)       ← 纯业务
+           if error → oops.gui.toast(msg)        ← GameMgr 调框架 API
+           if ok    → netManager.playCards(cards) ← Logic 发请求
+        └→ this.onRender?.('TURN', data)         ← 通知 Ctrl 渲染
+  Ctrl._render('TURN', data)
+        this._playZone.setInteractable(true)     ← 只在 Ctrl 操作节点
+```
+
+- Ctrl → GameMgr：传**数据值**作参数，绝不传 UI 对象 ✅
+- GameMgr → Logic：传数据，收结果 ✅
+- GameMgr → Ctrl：`onRender` callback ✅
+- Logic → 外部：只能 `return` 结果，不能主动调任何外部 ✅
+- Logic 持有 UI / 调 oops.xxx：❌ 立即修
+- GameMgr 持有 UI 对象：❌ 立即修
+
+### 场景导航规则
+
+`AppRoot` 的 `config.json` 中 `gui: []`，LayerManager 未初始化：
+
+| 操作 | 用法 |
+|------|------|
+| 场景跳转 | `director.loadScene('HallScene')` ✅ |
+| 错误提示 | `oops.gui.toast(msg)` ✅ |
+| 弹层显隐 | `node.active = true/false` ✅ |
+| **禁止** | `oops.gui.open()` / `oops.gui.remove()` ❌ 静默无效 |
+
+### 硬红线 grep（每次 commit 前必跑）
+
+```bash
+# 输出必须为空，否则不得提交
+grep -r "from 'cc'" client/assets/scripts/logic/
+grep -r "from 'cc'" client/assets/scripts/ui/view/
+grep -r "oops\.gui\.open\|oops\.gui\.remove" client/assets/scripts/
+```
+
+### 新文件归层决策树
+
+```
+需要 @property / extends Component？
+  是 → Ctrl 层   ui/ctrl/   @layer ctrl
+  否 → 需要 Jest 测业务逻辑？
+        是 → Logic 层  logic/   @layer logic
+        否 → 全局单例  → net/ 或 core/
+```
+
+### 文件头强制格式（新文件必须包含 @layer）
+
+```typescript
+/**
+ * @file XxxLogic.ts
+ * @description ...
+ * @layer logic        ← 值为 logic | ctrl | manager，缺失 = 未完成
+ * @module client/logic
+ */
+```
+
+### logic/ 命名规则（强制）
+
+```
+logic/
+├── GameMgr.ts          ← 唯一 Mgr，游戏场景总入口
+├── HallLogic.ts        ← Hall 场景协调器
+├── LaunchLogic.ts      ← Launch 场景协调器（git mv LaunchMgr.ts）
+├── HandLogic.ts        ← 手牌纯业务
+└── SettlementLogic.ts  ← 结算纯业务
+```
+
+新建文件时：除 `GameMgr.ts` 外，`logic/` 目录内所有文件必须以 `Logic.ts` 结尾。
+
+---
+
 ## 我的文件边界
 
 ```
 client/assets/
 ├── bundle/
-│   ├── common/      <- 公共资源
-│   ├── hall/        <- 大厅分包
-│   └── game/        <- 游戏桌分包
+│   └── game/        <- 游戏桌分包（唯一子包，LaunchScene 启动时预加载）
+│                       包含：GameScene + 108张牌图 + 游戏桌 Prefab
+├── prefabs/         <- 主包 Prefab（Hall/Launch 界面用）
 └── scripts/
-    ├── core/        <- oops-framework 封装
-    ├── net/         <- NetManager
-    ├── game/        <- 游戏逻辑控制器
-    ├── ui/          <- FairyGUI 界面控制器
+    ├── core/        <- oops-framework 根组件
+    ├── net/         <- NetManager（Manager 层）
+    ├── logic/       <- GameMgr（唯一入口）+ *Logic（零 CC 依赖）
+    ├── ui/
+    │   ├── ctrl/    <- CC Component Ctrl（Ctrl 层）
+    │   └── view/    <- 旧 Logic 文件（过渡期保留，等同 logic/ 层规则）
     └── shared/      <- 只读！不改！
 ```
 
@@ -95,7 +207,7 @@ enum ClientGameState {
 }
 ```
 
-状态由服务端 `GameState.phase` 驱动，在 `GameController.onStateChange()` 中响应。
+状态由服务端 `GameState.phase` 驱动，在 `GameMgr.onStateChange()` 中响应（Phase 1 迁移后）。
 
 ---
 
@@ -113,6 +225,48 @@ requestHint(): void
 
 服务端消息 → EventManager 广播命名：
 `HAND` / `REVEAL` / `OVER` / `TURN` / `PLAY` / `ERROR`
+
+---
+
+## 注释红线（覆盖全局"不加注释"原则）
+
+> 全局 CLAUDE.md 的"不加注释"规则**在此目录不适用**。client/ 的所有 .ts 文件必须按以下规范写注释，**缺注释 = 未完成**。
+
+**1. 文件头（每个 .ts 文件必须有）**
+```typescript
+/**
+ * @file 文件名.ts
+ * @description 这个组件/控制器做什么
+ * @module client/net | client/game | client/ui
+ */
+```
+
+**2. public 方法 JSDoc**
+```typescript
+/**
+ * 发送出牌请求到服务端。
+ * 注意：此方法只发送意图，不验证合法性（合法性由服务端判定）。
+ * @param cards 要出的牌，0-107 编码整数数组
+ */
+playCards(cards: number[]): void
+```
+
+**3. 状态机转换注释**
+```typescript
+// 收到 turn_change 消息时切换到 PLAYING 状态
+// 服务端是唯一的状态来源，客户端不自行推断状态
+case 'playing':
+  this.state = ClientGameState.PLAYING;
+```
+
+**4. 性能注释**
+```typescript
+// 使用对象池避免频繁 instantiate，减少 GC 压力
+// 微信小程序对内存敏感，卡牌节点必须复用
+this.cardPool.get();
+```
+
+**不需要写**：框架 API 标准用法、显而易见的赋值和条件判断。
 
 ---
 
