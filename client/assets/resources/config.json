@@ -1,0 +1,27 @@
+{
+    "type": "dev",
+    "bundle": {
+        "default": "resources"
+    },
+    "language": {
+        "type": ["zh"],
+        "default": "zh",
+        "path": {
+            "json": "language/json",
+            "texture": "language/texture"
+        }
+    },
+    "gui": [
+        { "type": "PopUp",  "name": "LayerPopUp"  },
+        { "type": "Notify", "name": "LayerNotify" }
+    ],
+    "config": {
+        "dev": {
+            "localDataKey": "ddz",
+            "localDataIv": "ddz_iv_2024",
+            "frameRate": 60,
+            "stats": false,
+            "mobileSafeArea": false
+        }
+    }
+}

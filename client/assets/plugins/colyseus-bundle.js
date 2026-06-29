@@ -4164,3 +4164,5 @@ var colyseus = (() => {
   registerSerializer("none", NoneSerializer);
   return __toCommonJS(index_exports);
 })();
+
+globalThis.colyseus = colyseus;

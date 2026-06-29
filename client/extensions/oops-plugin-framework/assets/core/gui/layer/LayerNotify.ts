@@ -4,8 +4,7 @@
  * @LastEditors: dgflash
  * @LastEditTime: 2022-09-02 13:44:12
  */
-import { BlockInputEvents, Node, instantiate } from "cc";
-import { EDITOR } from "cc/env";
+import { BlockInputEvents, Node, director, instantiate } from "cc";
 import { ViewUtil } from "../../utils/ViewUtil";
 import { PromptResType } from "../GuiEnum";
 import { Notify } from "../prompt/Notify";
@@ -14,12 +13,10 @@ import { LayerHelper } from "./LayerHelper";
 /* 滚动消息提示层 */
 export class LayerNotify extends Node {
     private black!: BlockInputEvents;
-    /** 等待提示资源 */
     private wait: Node = null!;
-    /** 自定义弹出提示资源 */
     private notify: Node = null!;
-    /** 自定义弹出提示内容资源 */
     private notifyItem: Node = null!;
+    private notifyPool: Node[] = [];
 
     constructor(name: string) {
         super(name);
@@ -61,34 +58,46 @@ export class LayerNotify extends Node {
      * @param useI18n 是否使用多语言
      */
     async toast(content: string, useI18n: boolean) {
-        if (this.notify == null) {
-            // 兼容编辑器预览模式
-            if (EDITOR) {
-                this.notify = await ViewUtil.createPrefabNodeAsync(PromptResType.Toast);
-            }
-            else {
-                this.notify = ViewUtil.createPrefabNode(PromptResType.Toast);
-            }
+        if (!this.notify?.isValid) {
+            this.notify = await ViewUtil.createPrefabNodeAsync(PromptResType.Toast);
             this.notifyItem = this.notify.children[0];
             this.notifyItem.parent = null;
         }
 
-        this.notify.parent = this;
-        let childNode = instantiate(this.notifyItem);
-        let prompt = childNode.getChildByName("prompt")!;
-        let toastCom = prompt.getComponent(Notify)!;
+        // LayerNotify 是持久化节点，不在 Canvas 渲染树内；把容器直接挂到当前场景 Canvas
+        const canvas = director.getScene()?.getChildByName('Canvas');
+        const container = (canvas?.isValid ? canvas : this) as Node;
+        if (this.notify.parent !== container) {
+            this.notify.parent = container;
+            this.notify.setPosition(0, 260, 0); // 屏幕上方，相对 Canvas 中心
+        }
+        const childNode = this._getItem();
         childNode.parent = this.notify;
+        const prompt = childNode.getChildByName("prompt")!;
+        const toastCom = prompt.getComponent(Notify)!;
 
         toastCom.onComplete = () => {
+            this._recycleItem(childNode);
             if (this.notify.children.length == 0) {
                 this.notify.parent = null;
             }
         };
         toastCom.toast(content, useI18n);
 
-        // 超过3个提示，就施放第一个提示
         if (this.notify.children.length > 3) {
             this.notify.children[0].destroy();
         }
+    }
+
+    private _getItem(): Node {
+        let node = this.notifyPool.pop();
+        if (node?.isValid) return node;
+        return instantiate(this.notifyItem);
+    }
+
+    private _recycleItem(node: Node): void {
+        if (!node?.isValid) return;
+        node.parent = null;
+        this.notifyPool.push(node);
     }
 }

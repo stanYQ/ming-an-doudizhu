@@ -24,36 +24,37 @@ const { ccclass, property } = _decorator;
 export class GameCtrl extends Component {
 
     // ── HandCardView ─────────────────────────────────────────────────────────
-    @property(Button) playButton!:    Button;
-    @property(Label)  patternLabel!:  Label;
+    @property(Button) playButton!:    Button;  // 出牌按钮，选牌合法时 interactable=true
+    @property(Label)  patternLabel!:  Label;   // 当前选牌牌型名称，如「顺子」「炸弹」
 
     // ── PlayZone ─────────────────────────────────────────────────────────────
-    @property(Button) playBtn!:        Button;
-    @property(Button) passBtn!:        Button;
-    @property(Label)  playErrorLabel!: Label;
-    @property(Label)  timerLabel!:     Label;
+    @property(Button) playBtn!:        Button;  // 出牌确认（PlayZone 内，与 playButton 联动）
+    @property(Button) passBtn!:        Button;  // 不出 / 跳过
+    @property(Label)  playErrorLabel!: Label;   // 出牌非法原因，如「不能小于上家」
+    @property(Label)  timerLabel!:     Label;   // 当前回合剩余秒数
 
     // ── 5 个席位根节点 ────────────────────────────────────────────────────────
+    // index 0=自己，1=左邻，2=左对，3=右对，4=右邻（顺时针）
     @property([Node]) seatNodes: Node[] = [];
 
     // ── CodeCardSelector ─────────────────────────────────────────────────────
-    @property(Node)   codeSelectorRoot!: Node;
-    @property(Button) confirmCodeBtn!:   Button;
+    @property(Node)   codeSelectorRoot!: Node;    // 暗号牌选择弹窗根节点
+    @property(Button) confirmCodeBtn!:   Button;  // 确认暗号牌，点击后弹窗关闭
 
     // ── SettlementView ────────────────────────────────────────────────────────
-    @property(Node)   settlementRoot!:      Node;
-    @property(Label)  bannerLabel!:         Label;
-    @property(Button) playAgainBtn!:        Button;
-    @property(Button) returnHallBtn!:       Button;
-    @property(Label)  rematchStatusLabel!:  Label;
+    @property(Node)   settlementRoot!:      Node;    // 结算面板根节点，game_over 后显示
+    @property(Label)  bannerLabel!:         Label;   // 「胜利」或「失败」横幅
+    @property(Button) playAgainBtn!:        Button;  // 再来一局
+    @property(Button) returnHallBtn!:       Button;  // 返回大厅
+    @property(Label)  rematchStatusLabel!:  Label;   // 「等待 X / 5 人…」再来一局状态
 
     // ── DoublingView ─────────────────────────────────────────────────────────
-    @property(Node)   doublingRoot!:        Node;
-    @property(Label)  doublingTimerLabel!:  Label;
-    @property(Label)  doublingStatusLabel!: Label;
-    @property(Button) doublingSingleBtn!:   Button;
-    @property(Button) doublingDoubleBtn!:   Button;
-    @property(Label)  doublingResultLabel!: Label;
+    @property(Node)   doublingRoot!:        Node;    // 加倍阶段面板根节点
+    @property(Label)  doublingTimerLabel!:  Label;   // 加倍操作倒计时剩余秒数
+    @property(Label)  doublingStatusLabel!: Label;   // 「请选择是否加倍」等提示
+    @property(Button) doublingSingleBtn!:   Button;  // 单倍（不加倍）
+    @property(Button) doublingDoubleBtn!:   Button;  // 双倍（加倍）
+    @property(Label)  doublingResultLabel!: Label;   // 本局最终加倍倍率，如「×4」
 
     private _net      = netManager;
     private _mgr!:    GameMgr;
