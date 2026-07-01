@@ -48,6 +48,17 @@ CREATE TABLE game_players (
   INDEX idx_record (record_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE checkin_records (
+  id           BIGINT PRIMARY KEY AUTO_INCREMENT,
+  user_id      BIGINT      NOT NULL,
+  checkin_date DATE        NOT NULL,
+  streak       INT         NOT NULL DEFAULT 1,
+  score_gained INT         NOT NULL DEFAULT 0,
+  created_at   DATETIME    DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_user_date (user_id, checkin_date),
+  INDEX idx_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE orders (
   id         BIGINT PRIMARY KEY AUTO_INCREMENT,
   order_no   VARCHAR(64)  NOT NULL UNIQUE,
