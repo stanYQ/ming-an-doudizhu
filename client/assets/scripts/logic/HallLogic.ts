@@ -9,6 +9,8 @@ import { message } from 'db://oops-framework/core/common/event/MessageManager';
 
 export interface NetLike {
     joinRoom(roomName: string, options: Record<string, unknown>): Promise<void>;
+    createFriendRoom(): Promise<void>;
+    joinByCode(code: string): Promise<void>;
     leaveRoom(): Promise<void>;
     forceStart(): void;
 }
@@ -17,6 +19,7 @@ export type RenderHandler = (event: string, data: unknown) => void;
 
 export class HallLogic {
     onRender?: RenderHandler;
+    private _gameStarted = false;
 
     constructor(private readonly _net: NetLike) {}
 
@@ -34,12 +37,13 @@ export class HallLogic {
         message.off('ROOM_UPDATE',    this._onRoomUpdate,    this);
         message.off('STATE',          this._onState,         this);
         message.off('MATCH_ACTION',   this._onMatchAction,   this);
+        this._gameStarted = false;
     }
 
     // ── 主动操作（HallCtrl 直接调用）────────────────────────────────────────
 
     async startQuickMatch(): Promise<void> {
-        await this._net.joinRoom('game', { mode: 'quick' });
+        await this._net.joinRoom('game', { aiFillEnabled: true });
     }
 
     // ── MATCH_ACTION 委托（MatchCtrl 通过 EventManager 触发）────────────────
@@ -52,10 +56,10 @@ export class HallLogic {
                 });
                 break;
             case 'createRoom':
-                this._net.joinRoom('game', { mode: 'friend' });
+                this._net.createFriendRoom();
                 break;
             case 'joinByCode':
-                if (data.payload) this._net.joinRoom('game', { roomCode: data.payload });
+                if (data.payload) this._net.joinByCode(data.payload);
                 break;
             case 'forceStart':
                 this._net.forceStart();
@@ -82,7 +86,8 @@ export class HallLogic {
     }
 
     private _onState(_evt: string, state: { phase: string }): void {
-        if (state.phase === 'dealing') {
+        if (!this._gameStarted && state.phase && state.phase !== 'waiting') {
+            this._gameStarted = true;
             this.onRender?.('GAME_STARTED', {});
         }
     }

@@ -16,16 +16,18 @@ function _colyseus(): any {
 export class NetManager {
     private client: any = null;
     private _room: any = null;
+    private _httpBase = '';
 
     /** 当前已加入的 Colyseus Room 实例，供 GameCtrl 读取席位信息。 */
     get room(): any { return this._room; }
 
     /**
      * 初始化 Colyseus Client 实例（不发起连接）。
-     * @param endpoint WebSocket 服务端地址，例如 'ws://localhost:2567'
+     * @param endpoint 服务端地址（http:// 或 ws:// 均可，Colyseus 内部自动转换）
      */
     init(endpoint: string): void {
         this.client = new (_colyseus().Client)(endpoint);
+        this._httpBase = endpoint.replace('ws://', 'http://').replace('wss://', 'https://');
     }
 
     /**
@@ -46,6 +48,36 @@ export class NetManager {
     async joinRoom(name: string, options: any): Promise<void> {
         this._room = await this.client.joinOrCreate(name, options);
         this._registerHandlers();
+    }
+
+    /**
+     * 创建好友房（不参与快速匹配撮合）。
+     * 服务端生成 roomCode 并通过 room_update 广播给房主。
+     */
+    async createFriendRoom(): Promise<void> {
+        this._room = await this.client.create('game', { isFriendRoom: true });
+        this._registerHandlers();
+    }
+
+    /**
+     * 按 roomId 加入已存在的房间（好友通过邀请码加入时使用）。
+     * @param roomId Colyseus 内部房间 ID，由 GET /rooms/code/:code 查得
+     */
+    async joinRoomById(roomId: string): Promise<void> {
+        this._room = await this.client.joinById(roomId);
+        this._registerHandlers();
+    }
+
+    /**
+     * 通过好友房邀请码加入房间。
+     * 先查 HTTP 端点拿 roomId，再用 joinById 建立 WebSocket 连接。
+     * @param code 6 位大写邀请码
+     */
+    async joinByCode(code: string): Promise<void> {
+        const res  = await fetch(`${this._httpBase}/rooms/code/${code.toUpperCase()}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? 'room not found');
+        await this.joinRoomById(data.roomId);
     }
 
     // 将 Colyseus room 消息路由到 oops EventManager，解耦 NetManager 与各 Controller

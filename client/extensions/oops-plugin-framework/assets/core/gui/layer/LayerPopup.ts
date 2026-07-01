@@ -31,7 +31,7 @@ export class LayerPopUp extends LayerUI {
             const r = await super.uiInit(state);
             if (r) {
                 // 界面加载完成显示时，启动触摸非窗口区域关闭
-                this.openVacancyRemove(state.config);
+                await this.openVacancyRemove(state.config);
 
                 // 界面加载完成显示时，层级事件阻挡
                 this.black.enabled = true;
@@ -81,10 +81,10 @@ export class LayerPopUp extends LayerUI {
     }
 
     /** 启动触摸非窗口区域关闭 */
-    protected openVacancyRemove(config: UIConfig) {
+    protected async openVacancyRemove(config: UIConfig) {
         // 背景半透明遮罩
         if (this.mask == null) {
-            this.mask = ViewUtil.createPrefabNode(PromptResType.Mask);
+            this.mask = await ViewUtil.createPrefabNodeAsync(PromptResType.Mask);
             this.mask.on(Node.EventType.TOUCH_END, this.onTouchEnd, this);
 
             this.black = this.mask.addComponent(BlockInputEvents);
