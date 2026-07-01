@@ -7,8 +7,9 @@
  * @module client/ui/ctrl
  */
 import { _decorator, Component, Label, Button, Node, sys } from 'cc';
-import { oops }    from 'db://oops-framework/core/Oops';
-import { message } from 'db://oops-framework/core/common/event/MessageManager';
+import { oops }       from 'db://oops-framework/core/Oops';
+import { message }    from 'db://oops-framework/core/common/event/MessageManager';
+import { netManager } from '../../net/NetManager';
 
 const { ccclass, property } = _decorator;
 
@@ -22,6 +23,10 @@ export class MatchCtrl extends Component {
     @property(Label)  aiCountdownLabel!: Label;
     @property(Button) cancelBtn!:        Button;
 
+    // ── 模式容器 ──────────────────────────────────────────────────────────────
+    @property(Node) quickMatchContent!: Node;
+    @property(Node) friendRoomContent!: Node;
+
     // ── 好友房区 ──────────────────────────────────────────────────────────────
     @property(Label)   roomCodeLabel!:    Label;
     @property(Node)    roomCodeNode!:     Node;
@@ -32,9 +37,6 @@ export class MatchCtrl extends Component {
     @property(Node)    ownerHintNode!:    Node;
     @property(Button)  shareBtn!:         Button;
 
-    // ── 通用 ──────────────────────────────────────────────────────────────────
-    @property(Label) errorLabel!: Label;
-    @property(Node)  errorNode!:  Node;
 
     private _mode     = '';
     private _roomCode = '';
@@ -44,6 +46,13 @@ export class MatchCtrl extends Component {
 
     onLoad() {
         this._mode = oops.storage?.get('match_mode') ?? 'quick';
+
+        const room = netManager.room;
+        if (room) {
+            const me = (room.state?.players as any)?.get?.(room.sessionId);
+            this._mySeat = (me?.seatIndex as number) ?? -1;
+        }
+
         this._applyModeLayout();
 
         message.on('WAITING_UPDATE', this._onWaitingUpdate, this);
@@ -103,7 +112,9 @@ export class MatchCtrl extends Component {
         }
         const full = msg.readyCount >= (msg.total ?? 5);
         if (this.aiCountdownNode) this.aiCountdownNode.active = !full;
-        if (!full && this.aiCountdownLabel) {
+        if (full) {
+            if (this.statusLabel) this.statusLabel.string = '即将开始…';
+        } else if (this.aiCountdownLabel) {
             this.aiCountdownLabel.string = msg.aiSeconds > 0
                 ? `${msg.aiSeconds} 秒后 AI 补位`
                 : 'AI 补位中…';
@@ -134,14 +145,17 @@ export class MatchCtrl extends Component {
                    : msg.code === 2001 ? '房间已满'
                    : msg.code === 2003 ? '至少需要 2 名真实玩家才能开局'
                    : `匹配错误 (${msg.code})`;
-        if (this.errorLabel) this.errorLabel.string = text;
-        if (this.errorNode)  this.errorNode.active  = true;
+        oops.gui.toast(text);
     }
 
     // ── 私有 ─────────────────────────────────────────────────────────────────
 
     private _applyModeLayout(): void {
         const isFriend = this._mode === 'friend';
+        // 先激活对应容器，再设置内部节点（父节点 inactive 时子节点设置无效）
+        if (this.quickMatchContent) this.quickMatchContent.active = !isFriend;
+        if (this.friendRoomContent) this.friendRoomContent.active = isFriend;
+
         if (this.aiCountdownNode)  this.aiCountdownNode.active  = !isFriend;
         if (this.roomCodeNode)     this.roomCodeNode.active     = false;
         if (this.startGameBtnNode) this.startGameBtnNode.active = false;

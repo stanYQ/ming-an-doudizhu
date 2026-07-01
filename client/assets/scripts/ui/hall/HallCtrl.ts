@@ -35,8 +35,11 @@ export class HallCtrl extends Component {
     private _hallLogic!: HallLogic;
 
     onLoad() {
-        netManager.init(SERVER_URL.replace('http', 'ws'));
-        netManager.setToken(oops.storage?.get('ddz_token') ?? null);
+        const token = oops.storage?.get('ddz_token') ?? null;
+        if (!token) { director.loadScene('LaunchScene'); return; }
+
+        netManager.init(SERVER_URL);
+        netManager.setToken(token);
 
         this._hallLogic = new HallLogic(netManager);
         this._hallLogic.onRender = (e, d) => this._render(e, d);
@@ -60,10 +63,10 @@ export class HallCtrl extends Component {
     private _render(event: string, _data: unknown): void {
         switch (event) {
             case 'MATCH_CANCELLED':
-                oops.gui.remove(UIId.MatchView);
+                try { oops.gui.remove(UIId.MatchView); } catch { /* 尚未打开则忽略 */ }
                 break;
             case 'GAME_STARTED':
-                oops.gui.remove(UIId.MatchView);
+                try { oops.gui.remove(UIId.MatchView); } catch { /* 尚未打开则忽略 */ }
                 director.loadScene('GameScene');
                 break;
         }
@@ -73,8 +76,11 @@ export class HallCtrl extends Component {
 
     onQuickMatchClick(): void {
         oops.storage?.set('match_mode', 'quick');
-        this._hallLogic.startQuickMatch();
         oops.gui.open(UIId.MatchView);
+        this._hallLogic.startQuickMatch().catch((err: any) => {
+            try { oops.gui.remove(UIId.MatchView); } catch { /* ignore */ }
+            oops.gui.toast(err?.message ?? '匹配失败，请重试');
+        });
     }
 
     onFriendRoomClick(): void {
