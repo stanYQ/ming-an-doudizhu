@@ -236,8 +236,11 @@ describe("HTTP — GET /auth/me", () => {
 
 describe("WS — Room lifecycle", () => {
   it("无效 JWT → 拒绝连接（code 3001）", async () => {
+    const prev = process.env.AUTH_MODE;
+    process.env.AUTH_MODE = "jwt";
     (colyseus.sdk.auth as any).token = "bad_token";
     await expect(colyseus.sdk.create("card_room", {})).rejects.toBeDefined();
+    process.env.AUTH_MODE = prev;
   });
 
   it("有效 JWT → 连接成功，sessionId 存在", async () => {

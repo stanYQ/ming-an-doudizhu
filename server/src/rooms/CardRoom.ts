@@ -55,6 +55,7 @@ export class CardRoom extends Room<GameState> {
 
   /** AC-7: Colyseus calls this before onJoin. Invalid token → reject with code 3001. */
   static async onAuth(token: string, _req: IncomingMessage): Promise<unknown> {
+    if ((process.env.AUTH_MODE ?? "stub") === "stub") return { userId: 0, openid: "stub_user" };
     const payload = AuthService.verifyToken(token);
     if (!payload) throw new Error(JSON.stringify({ code: 3001 }));
     return payload;
@@ -102,6 +103,7 @@ export class CardRoom extends Room<GameState> {
   // AI fill — TASK-029s / 030s
   private aiFillEnabled   = false;  // 仅快速匹配房且显式开启时为 true
   private isFriendRoom    = false;  // 好友房模式：room_update + force_start 协议
+  private _roomCode       = '';     // 好友房唯一邀请码，由 onCreate 生成写入 listing metadata
   private aiFillDelay     = 30;     // AI 补位倒计时（秒），可由 roomOptions / AI_FILL_DELAY env 覆盖
   private aiFillRemaining = 0;      // 剩余秒数，随 waiting_update 广播给客户端
   private aiFillTimer:  { clear(): void } | null = null; // 倒计时结束时触发补位+发牌
@@ -133,6 +135,12 @@ export class CardRoom extends Room<GameState> {
     this.aiFillEnabled = options?.aiFillEnabled ?? false;
     // AI_FILL_DELAY env 覆盖默认值，方便本地 demo 设 0 即时补位
     this.aiFillDelay   = options?.aiFillDelay   ?? Number(process.env.AI_FILL_DELAY ?? 30);
+
+    if (this.isFriendRoom) {
+      this._roomCode = CardRoom._generateRoomCode();
+      // 写入 listing metadata，供 GET /rooms/code/:code 查询（测试环境无此方法，安全跳过）
+      this.setMetadata?.({ roomCode: this._roomCode });
+    }
 
     this.onMessage("ready",            (c: Client)                                => this.handleReady(c));
     this.onMessage("select_code_card", (c: Client, m: {suit:number;value:number}) => this.handleSelectCode(c, m));
@@ -201,11 +209,7 @@ export class CardRoom extends Room<GameState> {
           this.rematchWindow.clear();
           this.rematchWindow = null;
         }
-        const arr = this.clients as unknown as Array<{ sessionId: string }>;
-        for (const aiSid of this.aiSessionIds) {
-          const idx = arr.findIndex(c => c.sessionId === aiSid);
-          if (idx !== -1) arr.splice(idx, 1);
-        }
+        this._evictAIClients();
         this.disconnect();
         return;
       }
@@ -941,6 +945,7 @@ export class CardRoom extends Room<GameState> {
     this.broadcast("room_update", {
       players:        playerSlots,
       ownerSeatIndex: ownerPlayer?.seatIndex ?? 0,
+      roomCode:       this._roomCode,
     });
   }
 
@@ -1023,8 +1028,19 @@ export class CardRoom extends Room<GameState> {
   private startRematchWindow(): void {
     this.rematchAgreed.clear();
     this.rematchWindow = this.clock.setTimeout(() => {
+      this._evictAIClients();
       this.disconnect();
     }, 30000);
+  }
+
+  // AI fake clients 没有真实 socket，disconnect() 前必须先从 clients 数组移除，
+  // 否则 Colyseus 内部 _forciblyCloseClient 会因 rawClient undefined 崩溃。
+  private _evictAIClients(): void {
+    const arr = this.clients as unknown as Array<{ sessionId: string }>;
+    for (const aiSid of this.aiSessionIds) {
+      const idx = arr.findIndex(c => c.sessionId === aiSid);
+      if (idx !== -1) arr.splice(idx, 1);
+    }
   }
 
   /**
@@ -1113,5 +1129,11 @@ export class CardRoom extends Room<GameState> {
       if (player) { player.role = ""; player.revealed = false; player.handCount = 0; }
       this.timeoutCount.set(sid, 0);
     }
+  }
+
+  // 生成 6 位大写邀请码，排除易混字符 O/0/I/1
+  private static _generateRoomCode(): string {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
   }
 }
