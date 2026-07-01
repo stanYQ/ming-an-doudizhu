@@ -18,6 +18,33 @@
 
 ## 待处理
 
+- [ ] ISSUE-C008 [🟡] 阶段推进未等客户端 ACK：dealing→landlord_select 发牌动画被截断
+  - **根因**: 服务端 `startDealing()` 发完 `your_hand` 后立即同步推进 `phase='landlord_select'`，客户端发牌动画（预计 1~2s）尚未播完即被强制切换
+  - **复现步骤**: 快速匹配进入游戏，观察发牌动画是否被截断；或 AI_FILL_DELAY=0 时客户端甚至在 GameScene 加载完成前服务端就已进入 landlord_select
+  - **期望行为**: 服务端等所有5名玩家各自发送 `dealing_ready` 消息后，再推进至 `landlord_select`；设超时兜底防止客户端崩溃卡全局
+  - **实际行为**: `phase` 在同一 server tick 内从 `dealing` 跳至 `landlord_select`，客户端动画无法正常播放
+  - **PM 决策（2026-06-30）**: 🟡 打包进 TASK-050s/TASK-050c。① 超时兜底 **10s**；② 超时策略：**静默跳过**（发牌阶段非关键互动，网络抖动不应打扰其他玩家，静默推进体验更优）。PROTOCOL.md 新增 `dealing_ready` C→S 消息定义。
+  - **任务拆分**: server-dev（CardRoom 等待5个 `dealing_ready` ACK + 10s 超时静默跳过，TASK-050s） + client-dev（发牌动画结束后发 `dealing_ready`，TASK-050c）
+  - 报告人: client-dev 联调 | 日期: 2026-06-30
+
+- [ ] ISSUE-C009 [🟡] 阶段推进未等客户端动画：landlord_select→doubling 暗号牌揭晓动画被截断
+  - **根因**: 服务端收到地主 `select_code_card` 后立即推进 `phase='doubling'`，其余4名玩家的暗号牌揭晓动画（预计 3~5s）被截断
+  - **复现步骤**: 进入游戏，地主选完暗号牌后观察其他玩家是否有时间看到揭晓动画
+  - **期望行为**: 服务端收到 `select_code_card` 后，先广播 `code_card_reveal`，等待固定 N 秒（GDD 决定）再推进 `doubling`；无需客户端 ACK，服务端定时器控制
+  - **实际行为**: 地主选完即切相位，非地主玩家无时间观看揭晓动效
+  - **PM 决策（2026-06-30）**: 🟡 打包进 TASK-050s/TASK-050c。① N = **4s**（3-5s 居中，足够玩家看清暗号牌花色/点数）；② `code_card_reveal` 是**新增消息**（PROTOCOL.md 未定义），需 server-dev 在 TASK-050s 中新增广播 + 同步更新 PROTOCOL.md，client-dev 在 TASK-050c 中新增 handler。payload：`{ suit, value, landlordSeatIndex }`。
+  - **任务拆分**: server-dev（`select_code_card` 后广播 `code_card_reveal` + 4s 定时器再推进 `doubling`，TASK-050s） + client-dev（`code_card_reveal` handler + 揭晓动画 4s，TASK-050c）
+  - 报告人: client-dev 联调 | 日期: 2026-06-30
+
+- [ ] ISSUE-C010 [🟡] 阶段推进未等客户端动画：doubling_result→playing 加倍结果展示被截断
+  - **根因**: 服务端所有玩家 `set_double` 提交完毕后立即广播 `doubling_result` 并推进 `phase='playing'`，客户端加倍结果展示动画（预计 2~3s）被截断
+  - **复现步骤**: 进入加倍阶段，全员提交后观察结果是否有足够展示时间再切出牌阶段
+  - **期望行为**: 服务端广播 `doubling_result` 后等待固定 M 秒（GDD 决定）再推进 `playing`；无需 ACK
+  - **实际行为**: `doubling_result` 与 `turn_change` 几乎同帧到达，玩家来不及看结果
+  - **PM 决策（2026-06-30）**: 🟡 打包进 TASK-050s/TASK-050c。① M = **2s**（2s 足够展示结果，避免拖慢节奏；动效时长紧凑比宽松体验更好）。server-dev 在 `checkDoublingComplete` 里广播后加 2s 定时器再推进，client-dev 动画时长对齐 2s。
+  - **任务拆分**: server-dev（`doubling_result` 后 2s 定时器再推进 `playing`，TASK-050s） + client-dev（结果动画时长对齐 2s，TASK-050c）
+  - 报告人: client-dev 联调 | 日期: 2026-06-30
+
 - [ ] ISSUE-S007 [🔴] GameFlow 完成后 Colyseus matchmaking 返回 503，后续所有 `create('game',...)` 立即失败，ProtocolCoverage AC-5~27 全部 skip
   - **PM 决策（2026-06-24）**: 🔴 根因：realPlayerCount=0 后 AI fake clients 未从 this.clients 移除，Colyseus 视旧房间仍存活，新 create() 被拒 503。分配 server-dev TASK-040：onLeave 里 realPlayerCount=0 时清除所有 aiSessionIds fake client 并调用 disconnect()。client-dev 临时绕过：非出牌 AC（7~14、16~24）可先推进，每 suite 间加 3s delay。
   - 复现步骤: ① `npm test -- --testPathPattern=GameFlow.integration --forceExit`（9/9 通过，62s）→ ② 立即运行 `npm test -- --testPathPattern=ProtocolCoverage.integration --forceExit` → AC-5~27 全部 503 skip；或直接 Node 脚本 `client.create('game', { aiFillEnabled: true })` 在 GameFlow 完成后立即失败

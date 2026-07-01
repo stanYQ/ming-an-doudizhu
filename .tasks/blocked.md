@@ -10,6 +10,10 @@
 
 ## 当前阻塞
 
+- [x] TASK-041/联调 阻塞原因: `CardRoom.onAuth` 无 stub 旁路 | 状态: 已修复 | CardRoom.ts:57 stub 旁路已加，405/405 | 日期: 2026-07-01
+
+## 当前阻塞
+
 - [x] TASK-036 阻塞原因: AC-18 需要服务端 `startTurnTimer` 改为异步执行 AI | 状态: 已自动解除 | 日期: 2026-06-29
   - 核查：CardRoom.ts:600-603 已是 `clock.setTimeout(() => executeAIAction(currentSid), delay)`，fix 在之前某次提交中已实现，无需额外改动
 

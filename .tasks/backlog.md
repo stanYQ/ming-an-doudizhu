@@ -83,6 +83,11 @@
 - [x] TASK-039c [client+shared] 同步 TASK-039 shared 变更：client/assets/scripts/shared/PatternHelper.ts 同步单张王修复 + ISSUE-S005 turn_change handler 读 isNewRound + C011 error 1001 不 pass **[done]**
 - [x] TASK-040 [server] ISSUE-S007：realPlayerCount=0 时清除 AI fake clients + disconnect()，修复 GameFlow 后 503 **[done: 398/398]**
 
+## P4.7 任务（动画同步修复，C008/C009/C010）⏳ 等待 TASK-043 完成后认领
+
+- [ ] TASK-050s [server] 动画同步修复：① dealing_ready ACK 等待（5人全到 or 10s 静默超时）→ landlord_select；② select_code_card 后广播 code_card_reveal + 4s 定时器再推进 doubling；③ doubling_result 广播后 2s 定时器再推进 playing；④ PROTOCOL.md 新增 dealing_ready C→S 定义 + code_card_reveal S→C 定义（payload: {suit, value, landlordSeatIndex}）→ spec: specs/animation-sync.md **[blocked: 等待 TASK-043]**
+- [ ] TASK-050c [client] 动画同步修复：① 发牌动画结束后发 dealing_ready（NetManager 新增接口）；② 监听 code_card_reveal 触发揭晓动画（4s，对齐服务端窗口）；③ doubling_result 结果展示动画对齐 2s → spec: specs/animation-sync.md **[blocked: 等待 TASK-043]**
+
 ## P5 任务（UI 视觉搭建，core 已验证）
 
 ### P5.0 前置 — 架构迁移（TASK-041 开始前必须完成）
@@ -106,8 +111,8 @@
 
 ### P5.3 — P1 大厅功能（P5.0 上线后）
 
-- [ ] TASK-047 [server] GET /api/leaderboard：全服 Top 50 积分榜，Redis 缓存 60s → spec: 待写
-- [ ] TASK-048 [server] POST /api/checkin：每日签到 + 连续签到奖励积分（50/100/200/300/500/500/1000） → spec: 待写
+- [x] TASK-047 [server] GET /api/leaderboard：全服 Top 50 积分榜，Redis 缓存 60s **[done]**
+- [x] TASK-048 [server] POST /api/checkin：每日签到 + 连续签到奖励积分（50/100/200/300/500/500/1000）**[done]**
 
 ---
 
