@@ -25,7 +25,6 @@
     ],
     "_active": true,
     "_components": [],
-    "_prefab": null,
     "_lpos": {
       "__type__": "cc.Vec3",
       "x": 0,
@@ -55,7 +54,7 @@
     },
     "autoReleaseAssets": false,
     "_globals": {
-      "__id__": 45
+      "__id__": 47
     },
     "_id": "72e6b989-4e07-461b-b20d-485331d4806e"
   },
@@ -108,7 +107,7 @@
     "_prefab": null,
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": 640.0000000000001,
+      "x": 640,
       "y": 360.00000000000006,
       "z": 0
     },
@@ -194,7 +193,7 @@
     "_priority": 0,
     "_fov": 45,
     "_fovAxis": 0,
-    "_orthoHeight": 360,
+    "_orthoHeight": 480.7017543859649,
     "_near": 0,
     "_far": 2000,
     "_color": {
@@ -398,8 +397,8 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 667,
-      "height": 194
+      "width": 534,
+      "height": 155
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -444,7 +443,10 @@
     "_fillRange": 0,
     "_isTrimmedMode": true,
     "_useGrayscale": false,
-    "_atlas": null,
+    "_atlas": {
+      "__uuid__": "4816ae0a-f7d7-4311-b65b-0abd9adf7ed8",
+      "__expectedType__": "cc.SpriteAtlas"
+    },
     "_id": "0cHgDwADhEyZ2r5m2zEE8o"
   },
   {
@@ -461,7 +463,7 @@
     "_target": null,
     "_left": 0,
     "_right": 0,
-    "_top": 70,
+    "_top": 89.5,
     "_bottom": 0,
     "_horizontalCenter": 0,
     "_verticalCenter": 0,
@@ -613,7 +615,7 @@
     "_prefab": null,
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": -543.3070000000002,
+      "x": -543.307,
       "y": 245,
       "z": 0
     },
@@ -868,7 +870,7 @@
     "_prefab": null,
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": -20.763000000000034,
+      "x": -25.351,
       "y": 0,
       "z": 0
     },
@@ -969,7 +971,7 @@
     "_alignFlags": 32,
     "_target": null,
     "_left": 0,
-    "_right": -5.236999999999966,
+    "_right": -0.6490000000000009,
     "_top": 0,
     "_bottom": 0,
     "_horizontalCenter": 0,
@@ -1487,7 +1489,7 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 1280.0000000000002,
+      "width": 1280,
       "height": 720
     },
     "_anchorPoint": {
@@ -1569,12 +1571,19 @@
     },
     "_children": [],
     "_active": true,
-    "_components": [],
+    "_components": [
+      {
+        "__id__": 45
+      },
+      {
+        "__id__": 46
+      }
+    ],
     "_prefab": null,
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": 0,
-      "y": 0,
+      "x": 640,
+      "y": 360,
       "z": 0
     },
     "_lrot": {
@@ -1601,30 +1610,66 @@
     "_id": "a1gctx7wtMkLfJHjWc3ff7"
   },
   {
+    "__type__": "cc.UITransform",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 44
+    },
+    "_enabled": true,
+    "__prefab": null,
+    "_contentSize": {
+      "__type__": "cc.Size",
+      "width": 1280,
+      "height": 720
+    },
+    "_anchorPoint": {
+      "__type__": "cc.Vec2",
+      "x": 0.5,
+      "y": 0.5
+    },
+    "_id": "5cEx9LpiZMAp5IiJ2qT8HM"
+  },
+  {
+    "__type__": "cc.Canvas",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 44
+    },
+    "_enabled": true,
+    "__prefab": null,
+    "_cameraComponent": null,
+    "_alignCanvasWithScreen": true,
+    "_id": "9bD8jPUtFHf5qmKpQ6ka1U"
+  },
+  {
     "__type__": "cc.SceneGlobals",
     "ambient": {
-      "__id__": 46
-    },
-    "shadows": {
-      "__id__": 47
-    },
-    "_skybox": {
       "__id__": 48
     },
-    "fog": {
+    "shadows": {
       "__id__": 49
     },
-    "octree": {
+    "_skybox": {
       "__id__": 50
     },
-    "skin": {
+    "fog": {
       "__id__": 51
     },
-    "lightProbeInfo": {
+    "octree": {
       "__id__": 52
     },
-    "postSettings": {
+    "skin": {
       "__id__": 53
+    },
+    "lightProbeInfo": {
+      "__id__": 54
+    },
+    "postSettings": {
+      "__id__": 55
     },
     "bakedWithStationaryMainLight": false,
     "bakedWithHighpLightmap": false

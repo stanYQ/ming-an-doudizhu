@@ -2,12 +2,12 @@
   "ver": "1.1.50",
   "importer": "prefab",
   "imported": true,
-  "uuid": "2e52f18e-e6f3-4378-8179-90ba3bbe5a81",
+  "uuid": "529139ae-de53-4e7d-a464-598aedd7dd72",
   "files": [
     ".json"
   ],
   "subMetas": {},
   "userData": {
-    "syncNodeName": "notify"
+    "syncNodeName": "SuitCardItem"
   }
 }
