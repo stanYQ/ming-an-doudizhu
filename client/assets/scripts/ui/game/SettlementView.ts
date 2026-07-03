@@ -6,6 +6,8 @@
  * @module client/ui/game
  */
 import { _decorator, Component, Label, Button } from 'cc';
+import { oops } from 'db://oops-framework/core/Oops';
+import { UIId } from '../../config/UIId';
 
 const { ccclass, property } = _decorator;
 
@@ -56,25 +58,33 @@ export class SettlementView extends Component {
     @property(Button) returnHallBtn!:      Button;
     @property(Label)  rematchStatusLabel!: Label;  // .node.active 控制显隐
 
-    onPlayAgain:  () => void = () => {};
-    onReturnHall: () => void = () => {};
+    private _requestRematch:       () => void          = () => {};
+    private _leaveRoom:            () => Promise<void> = () => Promise.resolve();
+    private _navigateToHall:       () => void          = () => {};
+    private _navigateToQuickMatch: () => void          = () => {};
 
-    _requestRematch:       () => void          = () => {};
-    _leaveRoom:            () => Promise<void> = () => Promise.resolve();
-    _navigateToHall:       () => void          = () => {};
-    _navigateToQuickMatch: () => void          = () => {};
+    private _data:          SettlementData | null = null;
+    private _animating      = false;
+    private _rematchPending = false;
 
-    private _data:               SettlementData | null = null;
-    private _animating           = false;
-    private _rematchPending      = false;
-    private _rematchTimerHandle: any = null;
+    /** oops.gui.open 时框架调用。 */
+    onAdded(data: {
+        msg:                 GameOverMsg;
+        requestRematch:      () => void;
+        leaveRoom:           () => Promise<void>;
+        navigateToHall:      () => void;
+        navigateToQuickMatch:() => void;
+    }): void {
+        this._requestRematch       = data.requestRematch;
+        this._leaveRoom            = data.leaveRoom;
+        this._navigateToHall       = data.navigateToHall;
+        this._navigateToQuickMatch = data.navigateToQuickMatch;
+        this.showResult(data.msg);
+    }
 
-    /**
-     * 展示结算界面（动画期间按钮禁用，动画结束后调 finishAnimation()）。
-     */
-    show(data: SettlementData): void {
+    /** 展示结算界面（动画期间按钮禁用）。 */
+    private show(data: SettlementData): void {
         this._data                       = data;
-        this.node.active                 = true;
         this._animating                  = true;
         this.playAgainBtn.interactable   = false;
         this.returnHallBtn.interactable  = false;
@@ -102,9 +112,7 @@ export class SettlementView extends Component {
         });
     }
 
-    hide(): void {
-        this.node.active = false;
-    }
+    hide(): void { oops.gui.remove(UIId.SettlementView); }
 
     /** Cocos tween 动画结束后调用，解锁操作按钮。 */
     finishAnimation(): void {
@@ -120,15 +128,15 @@ export class SettlementView extends Component {
         this.rematchStatusLabel.string       = '等待中…';
         this.rematchStatusLabel.node.active  = true;
         this._requestRematch();
-        // 30 秒未收到响应则恢复按钮
-        this._rematchTimerHandle = setTimeout(() => this._onRematchTimeout(), 30000);
+        this.scheduleOnce(this._onRematchTimeout, 30);
     }
 
     onReturnHallClick(): void {
         if (this._animating) return;
-        this._cancelRematchTimer();
+        this.unschedule(this._onRematchTimeout);
         this._leaveRoom();
-        this.onReturnHall();
+        this.hide();
+        this._navigateToHall();
     }
 
     onRematchUpdate(msg: RematchUpdateMsg): void {
@@ -137,19 +145,15 @@ export class SettlementView extends Component {
     }
 
     onRematchStart(): void {
-        this._cancelRematchTimer();
+        this.unschedule(this._onRematchTimeout);
         this.hide();
     }
 
     onRematchRedirect(): void {
-        this._cancelRematchTimer();
+        this.unschedule(this._onRematchTimeout);
         this.hide();
         this._leaveRoom();
         this._navigateToQuickMatch();
-    }
-
-    onDestroy(): void {
-        this._cancelRematchTimer();
     }
 
     // ── 数据查询方法 ────────────────────────────────────────────────────────────
@@ -222,18 +226,10 @@ export class SettlementView extends Component {
             : '内部分配：2:1';
     }
 
-    private _onRematchTimeout(): void {
-        this._rematchPending                 = false;
-        this._rematchTimerHandle             = null;
-        this.playAgainBtn.interactable       = true;
-        this.rematchStatusLabel.string       = '有玩家未同意';
-        this.rematchStatusLabel.node.active  = true;
-    }
-
-    private _cancelRematchTimer(): void {
-        if (this._rematchTimerHandle !== null) {
-            clearTimeout(this._rematchTimerHandle);
-            this._rematchTimerHandle = null;
-        }
-    }
+    private _onRematchTimeout = (): void => {
+        this._rematchPending                = false;
+        this.playAgainBtn.interactable      = true;
+        this.rematchStatusLabel.string      = '有玩家未同意';
+        this.rematchStatusLabel.node.active = true;
+    };
 }

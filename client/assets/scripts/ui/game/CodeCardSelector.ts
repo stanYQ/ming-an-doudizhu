@@ -5,6 +5,8 @@
  * @module client/ui/game
  */
 import { _decorator, Component, Button, Node, Prefab, instantiate } from 'cc';
+import { oops } from 'db://oops-framework/core/Oops';
+import { UIId } from '../../config/UIId';
 import { SuitCardItem } from './SuitCardItem';
 
 const { ccclass, property } = _decorator;
@@ -21,13 +23,13 @@ export class CodeCardSelector extends Component {
     @property(Node)   cardGrid!:           Node;    // GridLayout 容器
     @property(Prefab) suitCardItemPrefab!: Prefab;
 
-    /** 确认回调，GameCtrl 在 onLoad 注入 */
-    onConfirm: (choice: CodeCardChoice) => void = () => {};
+    /** 确认回调，由 onAdded 注入 */
+    private onConfirm: (choice: CodeCardChoice) => void = () => {};
 
     private _selected: CodeCardChoice | null = null;
 
     onLoad() {
-        // 4 花色 × 8 点数（3-10）= 32 格
+        // 4 花色 × 8 点数（3-10）= 32 格，onLoad 只跑一次
         for (let suit = 0; suit < 4; suit++) {
             for (let rank = 0; rank < 8; rank++) {
                 const node = instantiate(this.suitCardItemPrefab);
@@ -37,28 +39,26 @@ export class CodeCardSelector extends Component {
                 this.cardGrid.addChild(node);
             }
         }
-        this.node.active = false;
     }
 
-    show(): void {
-        this.node.active             = true;
+    /** oops.gui.open 时框架调用，data 来自 open 第二参数的 data 字段。 */
+    onAdded(data: { onConfirm: (choice: CodeCardChoice) => void }): void {
+        this.onConfirm               = data.onConfirm;
         this._selected               = null;
         this.confirmBtn.interactable = false;
         this.cardGrid.getComponentsInChildren(SuitCardItem).forEach(c => c.setSelected(false));
     }
 
-    hide(): void {
-        this.node.active = false;
-        this._selected   = null;
-    }
-
-    /** 触发确认回调（无选中时静默忽略）。 */
+    /** 触发确认回调并关闭弹窗。 */
     confirmSelection(): void {
         if (!this._selected) return;
         this.onConfirm(this._selected);
+        oops.gui.remove(UIId.CodeCardSelector);
     }
 
     getSelectedChoice(): CodeCardChoice | null { return this._selected; }
+
+    hide(): void { oops.gui.remove(UIId.CodeCardSelector); }
 
     private _onCellTap(suit: number, rank: number, item: SuitCardItem): void {
         this.cardGrid.getComponentsInChildren(SuitCardItem).forEach(c => c.setSelected(false));

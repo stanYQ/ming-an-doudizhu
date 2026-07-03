@@ -87,16 +87,20 @@ Ctrl.onPlayBtnClick()
 - Logic 持有 UI / 调 oops.xxx：❌ 立即修
 - GameMgr 持有 UI 对象：❌ 立即修
 
-### 场景导航规则
+### 弹层规则
 
-`AppRoot` 的 `config.json` 中 `gui: []`，LayerManager 未初始化：
+LayerManager 已初始化（AppRoot.ts `oops.gui.init(UIConfigData)`）：
 
 | 操作 | 用法 |
 |------|------|
 | 场景跳转 | `director.loadScene('HallScene')` ✅ |
 | 错误提示 | `oops.gui.toast(msg)` ✅ |
-| 弹层显隐 | `node.active = true/false` ✅ |
-| **禁止** | `oops.gui.open()` / `oops.gui.remove()` ❌ 静默无效 |
+| 弹层打开 | `oops.gui.open(UIId.X, { data })` ✅ |
+| 弹层关闭 | `oops.gui.remove(UIId.X)` ✅（组件内也可调用自身） |
+| 获取已开弹层 | `oops.gui.get(UIId.X)?.getComponent(Cls)` ✅ |
+| **禁止** | 直接 `node.active = true/false` 控制弹层节点 ❌ |
+
+**游戏弹层**（已注册 UIId）：`CodeCardSelector` / `DoublingView` / `SettlementView`，prefab 放 `resources/prefab/game/`。
 
 ### 硬红线 grep（每次 commit 前必跑）
 

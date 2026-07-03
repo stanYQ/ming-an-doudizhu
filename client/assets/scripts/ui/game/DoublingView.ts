@@ -5,6 +5,8 @@
  * @module client/ui/game
  */
 import { _decorator, Component, Label, Button } from 'cc';
+import { oops } from 'db://oops-framework/core/Oops';
+import { UIId } from '../../config/UIId';
 
 const { ccclass, property } = _decorator;
 
@@ -30,27 +32,21 @@ export class DoublingView extends Component {
     @property(Button) doubleBtn!:   Button;
     @property(Label)  resultLabel!: Label;  // 结果展示（显隐用 resultLabel.node.active）
 
-    /** 本人席位编号，GameCtrl 在 onLoad 注入 */
-    _mySeatIndex: number = -1;
-    /** 加倍选择回调，GameCtrl 在收到 DOUBLING_START 前注入 */
-    _onSetDouble: (value: 1 | 2) => void = () => {};
-
+    private _mySeatIndex: number = -1;
+    private _onSetDouble: (value: 1 | 2) => void = () => {};
     private _submitted     = false;
-    private _timerHandle: any = null;
+    private _remaining     = 0;
 
-    /**
-     * 显示加倍面板并启动倒计时。
-     * 地主立即可点击；非地主初始禁用，等待地主先选。
-     */
-    show(msg: DoublingStartMsg): void {
-        this.node.active             = true;
+    /** oops.gui.open 时框架调用。 */
+    onAdded(data: { msg: DoublingStartMsg; mySeatIndex: number; onSetDouble: (v: 1 | 2) => void }): void {
+        this._mySeatIndex = data.mySeatIndex;
+        this._onSetDouble = data.onSetDouble;
         this._submitted              = false;
         this.resultLabel.node.active = false;
-
-        const isLandlord = msg.landlordSeatIndex === this._mySeatIndex;
+        const isLandlord = data.msg.landlordSeatIndex === this._mySeatIndex;
         this.statusLabel.string = isLandlord ? '选择加倍倍数' : '等待地主选择…';
         this._setButtons(isLandlord);
-        this._startCountdown(msg.timeout);
+        this._startCountdown(data.msg.timeout);
     }
 
     /**
@@ -62,7 +58,7 @@ export class DoublingView extends Component {
     }
 
     /**
-     * 全员加倍结果到达：展示结果，1.5 秒后自动隐藏。
+     * 全员加倍结果到达：展示结果，1.5 秒后自动关闭。
      */
     onResult(msg: DoublingResultMsg): void {
         this._setButtons(false);
@@ -70,24 +66,16 @@ export class DoublingView extends Component {
             .map(r => `座位${r.seatIndex}: ${r.doubled ? '已加倍 ×2' : '未加倍 ×1'}`)
             .join('\n');
         this.resultLabel.node.active = true;
-        setTimeout(() => this.isValid && this.hide(), 1500);
+        this.scheduleOnce(() => this.hide(), 1.5);
     }
 
-    /** 隐藏面板并停止倒计时。 */
     hide(): void {
-        this.node.active = false;
-        if (this._timerHandle !== null) {
-            clearInterval(this._timerHandle);
-            this._timerHandle = null;
-        }
+        this.unscheduleAllCallbacks();
+        oops.gui.remove(UIId.DoublingView);
     }
 
     onSingleClick(): void { this._submit(1); }
     onDoubleClick(): void { this._submit(2); }
-
-    onDestroy(): void {
-        if (this._timerHandle !== null) clearInterval(this._timerHandle);
-    }
 
     private _submit(value: 1 | 2): void {
         if (this._submitted || !this.singleBtn.interactable) return;
@@ -97,19 +85,20 @@ export class DoublingView extends Component {
     }
 
     private _startCountdown(seconds: number): void {
-        if (this._timerHandle !== null) clearInterval(this._timerHandle);
-        let remaining = seconds;
-        this.timerLabel.string = String(remaining);
-        this._timerHandle = setInterval(() => {
-            remaining--;
-            this.timerLabel.string = String(remaining);
-            if (remaining <= 0) {
-                clearInterval(this._timerHandle);
-                this._timerHandle = null;
-                this._setButtons(false);
-            }
-        }, 1000);
+        this.unschedule(this._onTick);
+        this._remaining = seconds;
+        this.timerLabel.string = String(this._remaining);
+        this.schedule(this._onTick, 1);
     }
+
+    private _onTick = (): void => {
+        this._remaining--;
+        this.timerLabel.string = String(this._remaining);
+        if (this._remaining <= 0) {
+            this.unschedule(this._onTick);
+            this._setButtons(false);
+        }
+    };
 
     private _setButtons(enabled: boolean): void {
         this.singleBtn.interactable = enabled;

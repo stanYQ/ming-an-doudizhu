@@ -4,17 +4,15 @@
  * @layer ctrl
  * @module client/ui/game
  */
-import { _decorator, Component, Label, Button } from 'cc';
+import { _decorator, Component, Label } from 'cc';
 
 const { ccclass, property } = _decorator;
 
 @ccclass('PlayZone')
 export class PlayZone extends Component {
 
-    @property(Button) playBtn!:    Button;
-    @property(Button) passBtn!:    Button;
-    @property(Label)  errorLabel!: Label;
-    @property(Label)  timerLabel!: Label;
+    @property(Label) timerLabel!: Label;   // 当前出牌者倒计时
+    @property(Label) lastPlayLabel!: Label; // 上一手牌文字（TASK-044 替换为卡牌节点）
 
     private _lastPlayerId = '';
     private _lastCards:   number[] = [];
@@ -46,24 +44,6 @@ export class PlayZone extends Component {
         this._lastCards    = [];
     }
 
-    setPlayButtonEnabled(enabled: boolean): void {
-        this.playBtn.interactable = enabled;
-    }
-
-    setPassButtonEnabled(enabled: boolean): void {
-        this.passBtn.interactable = enabled;
-    }
-
-    setInteractable(enabled: boolean): void {
-        this.playBtn.interactable = enabled;
-        this.passBtn.interactable = enabled;
-    }
-
-    showError(msg: string): void {
-        this.errorLabel.string      = msg;
-        this.errorLabel.node.active = true;
-    }
-
     /**
      * 启动倒计时（deadline 后 update() 会驱动 timerLabel）。
      * @param deadline 服务端下发的截止时间戳（毫秒）
@@ -72,5 +52,4 @@ export class PlayZone extends Component {
         this._deadline = deadline;
     }
 
-    showHint(_cards: number[]): void {}
 }

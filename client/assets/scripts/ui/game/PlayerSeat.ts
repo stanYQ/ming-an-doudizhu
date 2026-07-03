@@ -30,9 +30,9 @@ export class PlayerSeat extends Component {
 
     seatIndex = 0;
 
-    private _identity    = '';
-    private _timerHandle: any = null;
-    private _totalMs          = 0;
+    private _identity = '';
+    private _deadline = 0;
+    private _totalMs  = 0;
 
     /**
      * 刷新席位显示数据（每次 turn_change 或 play_broadcast 后调用）。
@@ -55,28 +55,25 @@ export class PlayerSeat extends Component {
     startTurnRing(deadline: number): void {
         this.stopTurnRing();
         if (this.timerNode) this.timerNode.active = true;
-        this._totalMs = Math.max(deadline - Date.now(), 1);
+        this._deadline = deadline;
+        this._totalMs  = Math.max(deadline - Date.now(), 1);
         if (this.ringFill) this.ringFill.fillRange = 1;
-        this._timerHandle = setInterval(() => {
-            const remaining = deadline - Date.now();
-            if (this.ringFill) {
-                this.ringFill.fillRange = Math.max(0, remaining / this._totalMs);
-            }
-            if (remaining <= 0) {
-                clearInterval(this._timerHandle);
-                this._timerHandle = null;
-            }
-        }, 500);
+        this.schedule(this._onRingTick, 0.5);
     }
+
+    private _onRingTick = (): void => {
+        const remaining = this._deadline - Date.now();
+        if (this.ringFill) {
+            this.ringFill.fillRange = Math.max(0, remaining / this._totalMs);
+        }
+        if (remaining <= 0) this.stopTurnRing();
+    };
 
     /** 隐藏圆环并停止计时。 */
     stopTurnRing(): void {
+        this.unschedule(this._onRingTick);
         if (this.timerNode) this.timerNode.active = false;
         if (this.ringFill)  this.ringFill.fillRange = 1;
-        if (this._timerHandle !== null) {
-            clearInterval(this._timerHandle);
-            this._timerHandle = null;
-        }
     }
 
     /**
@@ -100,7 +97,4 @@ export class PlayerSeat extends Component {
 
     getIdentity(): string { return this._identity; }
 
-    onDestroy() {
-        this.stopTurnRing();
-    }
 }

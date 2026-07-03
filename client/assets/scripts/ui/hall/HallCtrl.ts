@@ -45,7 +45,7 @@ export class HallCtrl extends Component {
         this._hallLogic.onRender = (e, d) => this._render(e, d);
         this._hallLogic.init();
 
-        const info = oops.storage?.getJson?.('ddz_user', null) as
+        const info = oops.storage.getJson('ddz_user', null) as
             { nickname?: string; score?: number; rankLevel?: string } | null;
         if (info) {
             if (this.nicknameLabel) this.nicknameLabel.string = info.nickname ?? '';

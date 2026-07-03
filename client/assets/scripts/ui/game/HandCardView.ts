@@ -31,14 +31,23 @@ const PATTERN_LABEL: Record<string, string> = {
 @ccclass('HandCardView')
 export class HandCardView extends Component {
 
-    @property(Prefab)  cardItemPrefab!: Prefab;   // CardItem.prefab
-    @property(Node)    cardContainer!:  Node;      // HorizontalLayout 容器
-    @property(Label)   patternHintLabel!: Label;   // 当前选牌牌型，如「顺子」
-    @property(Button)  playButton!:     Button;    // 出牌按钮（选牌合法时启用）
+    @property(Prefab)  cardItemPrefab!:   Prefab;
+    @property(Node)    cardContainer!:   Node;
+    @property(Label)   patternHintLabel!: Label;
+    @property(Button)  playButton!:      Button;
+    @property(Button)  passButton!:      Button;
+    @property(Button)  hintButton!:      Button;
 
-    private _cards:    number[] = [];
-    private _selected: Set<number> = new Set();    // 排序后 _cards 的下标集合
-    private _interactable = true;
+    /** GameCtrl 在 onLoad 注入，按钮 ClickEvent 指向 HandCardView 自身方法 */
+    _onPlay: (cards: number[]) => void = () => {};
+    _onPass: () => void = () => {};
+    _onHint: () => void = () => {};
+
+    private _cards:      number[] = [];
+    private _selected:   Set<number> = new Set();
+    private _interactable  = true;
+    private _turnActive    = false;   // 是否轮到本人出牌
+    private _passEnabled   = false;
     private _pool!: NodePool;
 
     onLoad() {
@@ -94,12 +103,46 @@ export class HandCardView extends Component {
         this._updatePatternUI();
     }
 
-    /** 控制手牌区是否响应点击（非本人回合时禁用）。 */
-    setInteractable(enabled: boolean): void {
-        this._interactable = enabled;
+    /** 服务端 turn_change：激活/关闭本人出牌权。 */
+    setTurnActive(enabled: boolean): void {
+        this._turnActive = enabled;
+        this.hintButton.interactable = enabled;
+        this._updatePatternUI();
     }
 
-    showBottomCards(_cards: number[]): void {}
+    /** 控制「不要」按钮（首出无需不要）。 */
+    setPassEnabled(enabled: boolean): void {
+        this._passEnabled = enabled;
+        this.passButton.interactable = enabled;
+    }
+
+    /** 整体禁用（结算/非游戏阶段）。 */
+    setInteractable(enabled: boolean): void {
+        this._interactable  = enabled;
+        this._turnActive    = enabled;
+        this.hintButton.interactable = enabled;
+        this._updatePatternUI();
+        this.passButton.interactable = enabled;
+    }
+
+    /**
+     * 服务端 hint 响应：自动选中建议的牌。
+     * @param cards 服务端推荐的牌，0-107 编码数组
+     */
+    selectHint(cards: number[]): void {
+        this.clearSelection();
+        cards.forEach(code => {
+            const i = this._cards.indexOf(code);
+            if (i >= 0) this.selectCard(i);
+        });
+    }
+
+    /** PlayBtn ClickEvent 目标方法（prefab 内部自持，不跨节点引用）。 */
+    onPlayBtnClick(): void { this._onPlay(this.getSelectedCards()); }
+    /** PassBtn ClickEvent 目标方法。 */
+    onPassBtnClick(): void { this._onPass(); }
+    /** HintBtn ClickEvent 目标方法。 */
+    onHintBtnClick(): void { this._onHint(); }
 
     private _clearCards(): void {
         [...this.cardContainer.children].forEach(n => {
@@ -111,14 +154,15 @@ export class HandCardView extends Component {
     private _updatePatternUI(): void {
         const sel = this.getSelectedCards();
         if (sel.length === 0) {
-            this.playButton.interactable      = false;
-            this.patternHintLabel.string      = '请选择合法牌型';
+            this.playButton.interactable = false;
+            this.patternHintLabel.string = '请选择合法牌型';
             return;
         }
         const pattern = parse(sel);
         const invalid = pattern.type === PatternType.INVALID;
-        this.playButton.interactable      = !invalid;
-        this.patternHintLabel.string      = invalid
+        // 出牌按钮：轮到本人 AND 牌型合法
+        this.playButton.interactable = this._turnActive && !invalid;
+        this.patternHintLabel.string = invalid
             ? '请选择合法牌型'
             : (PATTERN_LABEL[pattern.type] ?? pattern.type);
     }
