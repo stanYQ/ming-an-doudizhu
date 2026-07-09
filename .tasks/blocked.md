@@ -10,6 +10,7 @@
 
 ## 已解决（历史记录）
 
+- [x] TASK-HAND-UPDATE [server] 出牌/pass 后服务端未发送 `your_hand` → 已修复：handlePlay 成功后发送 client.send("your_hand")，412/412 | server-dev | 日期: 2026-07-09
 - [x] TASK-051 [client+shared] 技术障碍：Cocos Creator 跨目录引用 → 已解决：采用预构建脚本方案（TASK-051B）| 日期: 2026-07-09
 - [x] TASK-041/联调 `CardRoom.onAuth` 无 stub 旁路 → 已修复：CardRoom.ts:57 stub 旁路已加 | 日期: 2026-07-01
 - [x] TASK-036 AC-18 需服务端 `startTurnTimer` 异步执行 AI → 已自动解除 | 日期: 2026-06-29
@@ -22,15 +23,4 @@
 
 ## 当前阻塞
 
-- [ ] TASK-051 [client+shared] 技术障碍：Cocos Creator 不支持跨目录引用 /shared/ | 需要: PM决策技术方案 | 报告人: client-dev | 日期: 2026-07-09
-  - **问题**: Cocos Creator 要求所有代码在 `assets/` 内，不支持 TypeScript 路径映射 `@shared/*`，也不支持跨目录相对路径 `../../../shared/`
-  - **已尝试方案**:
-    1. ❌ TypeScript 路径映射 `@shared/*` — Cocos 运行时不识别
-    2. ❌ 相对路径 `../../../shared/` — TypeScript 编译失败
-    3. ❌ 符号链接 `client/assets/scripts/shared → /shared/` — Cocos 要求导入添加 `.ts` 扩展名，破坏 server 端（Node.js 不需要扩展名）
-  - **可行方案**:
-    - 方案 A: **保持副本**（回退 TASK-051）— 维持现状，接受手动同步开销
-    - 方案 B: **预构建脚本** — npm script 自动同步 `/shared/` → `client/assets/scripts/shared/`
-    - 方案 C: **重构为 npm package** — 将 shared 发布为独立包，双端引用
-  - **建议**: 方案 A（副本）成本最低；方案 B 可作为增量优化（5min/次同步 → 自动化）
-  - **影响**: 当前有未提交改动（符号链接 + 导入语句修改），需回退或继续推进
+（无）

@@ -457,6 +457,9 @@ export class CardRoom extends Room<GameState> {
     RuleEngine.removeCards(hand, msg.cards);
     player.handCount = hand.length;
 
+    // TASK-HAND-UPDATE: 出牌成功后发送更新后的手牌给当前玩家（权威修正）
+    client.send("your_hand", { cards: hand });
+
     // Update shared last-play state
     this.state.lastPlay.splice(0, this.state.lastPlay.length);
     for (const c of msg.cards) this.state.lastPlay.push(c);
