@@ -33,12 +33,13 @@ import { GameMgr, ClientGameState } from '../logic/GameMgr';
 
 function makeController() {
     const mockNet = {
-        playCards:      jest.fn(),
-        pass:           jest.fn(),
-        selectCodeCard: jest.fn(),
-        setDouble:      jest.fn(),
-        requestRematch: jest.fn(),
-        leaveRoom:      jest.fn().mockResolvedValue(undefined),
+        playCards:        jest.fn(),
+        pass:             jest.fn(),
+        selectCodeCard:   jest.fn(),
+        setDouble:        jest.fn(),
+        sendDealingReady: jest.fn(),
+        requestRematch:   jest.fn(),
+        leaveRoom:        jest.fn().mockResolvedValue(undefined),
     };
     const renderEvents: Array<[string, any]> = [];
     const mgr = new GameMgr(mockNet as any);
@@ -65,7 +66,7 @@ beforeEach(() => {
 // ===== AC-1: 初始状态 CONNECTING =====
 test('AC-1: 构造时状态为 CONNECTING', () => {
     const mockNet = { playCards: jest.fn(), pass: jest.fn(), selectCodeCard: jest.fn(),
-                      setDouble: jest.fn(), requestRematch: jest.fn(), leaveRoom: jest.fn() };
+                      setDouble: jest.fn(), sendDealingReady: jest.fn(), requestRematch: jest.fn(), leaveRoom: jest.fn() };
     const mgr = new GameMgr(mockNet as any);
     expect(mgr.getState()).toBe(ClientGameState.CONNECTING);
 });
@@ -185,6 +186,21 @@ test('AC-7: HAND 事件 → onRender HAND({cards})', () => {
     const { renderEvents } = makeController();
     emit('HAND', { cards: [1, 2, 3] });
     expect(lastRender(renderEvents, 'HAND')?.cards).toEqual([1, 2, 3]);
+});
+
+// ===== TASK-050c AC-C3: HAND → sendDealingReady（兜底） =====
+test('TASK-050c AC-C3: HAND 事件触发后立即调用 sendDealingReady（兜底逻辑）', () => {
+    const { mockNet } = makeController();
+    emit('HAND', { cards: [1, 2, 3] });
+    expect(mockNet.sendDealingReady).toHaveBeenCalledTimes(1);
+});
+
+// ===== TASK-050c AC-C4: CODE_CARD_REVEAL → onRender =====
+test('TASK-050c AC-C4: CODE_CARD_REVEAL → onRender CODE_CARD_REVEAL({suit, value, landlordSeatIndex})', () => {
+    const { renderEvents } = makeController();
+    const msg = { suit: 1, value: 5, landlordSeatIndex: 2 };
+    emit('CODE_CARD_REVEAL', msg);
+    expect(lastRender(renderEvents, 'CODE_CARD_REVEAL')).toEqual(msg);
 });
 
 // ===== AC-8: TURN → onRender TURN with isMyTurn =====

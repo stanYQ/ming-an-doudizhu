@@ -77,6 +77,7 @@ const routingCases: [string, string][] = [
     ['game_over',        'OVER'],
     ['turn_change',      'TURN'],
     ['error',            'ERROR'],
+    ['code_card_reveal', 'CODE_CARD_REVEAL'],
     ['doubling_start',   'DOUBLING_START'],
     ['landlord_doubled', 'LANDLORD_DOUBLED'],
     ['doubling_result',  'DOUBLING_RESULT'],
@@ -147,6 +148,12 @@ test('AC-15: requestHint 发送 request_hint', async () => {
     expect(mockSend).toHaveBeenCalledWith('request_hint');
 });
 
+test('TASK-050c AC-C1: sendDealingReady 发送 dealing_ready', async () => {
+    await setupWithRoom();
+    manager.sendDealingReady();
+    expect(mockSend).toHaveBeenCalledWith('dealing_ready');
+});
+
 // ===== AC-16 =====
 test('AC-16: room 为 null 时所有 send 方法静默忽略', () => {
     manager.init('ws://localhost:2567');
@@ -156,6 +163,7 @@ test('AC-16: room 为 null 时所有 send 方法静默忽略', () => {
     expect(() => manager.reconnectSync()).not.toThrow();
     expect(() => manager.requestHint()).not.toThrow();
     expect(() => manager.setDouble(1)).not.toThrow();
+    expect(() => manager.sendDealingReady()).not.toThrow();
     expect(() => manager.forceStart()).not.toThrow();
     expect(() => manager.requestRematch()).not.toThrow();
     expect(mockSend).not.toHaveBeenCalled();

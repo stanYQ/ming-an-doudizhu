@@ -31,6 +31,7 @@ export interface NetLike {
     pass(): void;
     selectCodeCard(suit: number, value: number): void;
     setDouble(v: 1 | 2): void;
+    sendDealingReady(): void;
     requestRematch(): void;
     leaveRoom(): Promise<void>;
 }
@@ -46,7 +47,7 @@ export class GameMgr {
     private _mySeatIndex:      number          = -1;
     private _mySessionId:      string          = '';
     private _currentSeat:      number          = -1;
-    private _lastPlaySnapshot: number[]        = [];
+    private _turnDeadline:      number          = 0;
 
     private readonly _handLogic = new HandLogic();
 
@@ -66,6 +67,7 @@ export class GameMgr {
         message.on('REVEAL',           this._onReveal,          this);
         message.on('OVER',             this._onOver,            this);
         message.on('ERROR',            this._onError,           this);
+        message.on('CODE_CARD_REVEAL', this._onCodeCardReveal,  this);
         message.on('DOUBLING_START',   this._onDoublingStart,   this);
         message.on('LANDLORD_DOUBLED', this._onLandlordDoubled, this);
         message.on('DOUBLING_RESULT',  this._onDoublingResult,  this);
@@ -86,6 +88,7 @@ export class GameMgr {
         message.off('REVEAL',           this._onReveal,          this);
         message.off('OVER',             this._onOver,            this);
         message.off('ERROR',            this._onError,           this);
+        message.off('CODE_CARD_REVEAL', this._onCodeCardReveal,  this);
         message.off('DOUBLING_START',   this._onDoublingStart,   this);
         message.off('LANDLORD_DOUBLED', this._onLandlordDoubled, this);
         message.off('DOUBLING_RESULT',  this._onDoublingResult,  this);
@@ -107,6 +110,8 @@ export class GameMgr {
 
     getState(): ClientGameState { return this._state; }
     getMySeatIndex(): number    { return this._mySeatIndex; }
+    getCurrentSeat(): number    { return this._currentSeat; }
+    getTurnDeadline(): number   { return this._turnDeadline; }
 
     // ── 出牌操作（AC-7）─────────────────────────────────────────────────────
 
@@ -145,60 +150,43 @@ export class GameMgr {
     // ── 服务端消息处理 ────────────────────────────────────────────────────────
 
     private _onState(_event: string, state: any): void {
-        let shouldShowLastPlay  = false;
-        let shouldClearLastPlay = false;
-
         switch (state.phase) {
             case 'dealing':
                 this._state = ClientGameState.DEALING;
-                this._lastPlaySnapshot = [];
                 break;
-
             case 'landlord_select':
                 this._state = ClientGameState.LANDLORD_SELECT;
                 break;
-
             case 'doubling':
                 this._state = ClientGameState.DOUBLING;
                 break;
-
             case 'playing':
                 this._state = ClientGameState.PLAYING;
-                if (state.lastPlay?.length) {
-                    const inc  = state.lastPlay as number[];
-                    const same = inc.length === this._lastPlaySnapshot.length &&
-                                 inc.every((v, i) => v === this._lastPlaySnapshot[i]);
-                    if (!same) {
-                        this._lastPlaySnapshot = [...inc];
-                        shouldShowLastPlay = true;
-                    }
-                } else if (this._lastPlaySnapshot.length > 0) {
-                    this._lastPlaySnapshot = [];
-                    shouldClearLastPlay = true;
-                }
                 break;
-
             case 'settlement':
                 this._state = ClientGameState.SETTLEMENT;
                 break;
-
             case 'waiting':
                 this._state = ClientGameState.IN_ROOM_WAIT;
                 break;
         }
 
+        // 将 lastPlay / lastPlayerId 原样传给 Ctrl，Ctrl 层自己去重判断
+        const rawLastPlay: number[] = state.lastPlay?.length
+            ? [...state.lastPlay] : [];
         this.onRender?.('STATE', {
             phase:              state.phase,
             isLandlord:         state.landlordSeat === this._mySeatIndex,
-            lastPlay:           this._lastPlaySnapshot,
+            lastPlay:           rawLastPlay,
             lastPlayerId:       state.lastPlayerId ?? '',
-            shouldShowLastPlay,
-            shouldClearLastPlay,
         });
     }
 
     private _onHand(_event: string, msg: { cards: number[] }): void {
         this.onRender?.('HAND', msg);
+        // AC-C3: 兜底逻辑 — 若无发牌动画或动画未接入回调，直接发送 dealing_ready
+        // 实际发牌动画完成后也会调用 sendDealingReady()，服务端会去重处理
+        this._net.sendDealingReady();
     }
 
     private _onBottomCards(_event: string, msg: { cards: number[] }): void {
@@ -210,8 +198,9 @@ export class GameMgr {
     }
 
     private _onTurn(_event: string, msg: { seatIndex: number; deadline: number; isNewRound?: boolean }): void {
-        this._currentSeat = msg.seatIndex;
-        const isMyTurn    = this._currentSeat === this._mySeatIndex;
+        this._currentSeat  = msg.seatIndex;
+        this._turnDeadline = msg.deadline;
+        const isMyTurn     = this._currentSeat === this._mySeatIndex;
         this.onRender?.('TURN', { ...msg, isMyTurn });
     }
 
@@ -230,6 +219,11 @@ export class GameMgr {
             case 1002: oops.gui.toast('压不过上家'); break;
             case 1003: break; // 静默（不轮到本人时的防御拦截）
         }
+    }
+
+    private _onCodeCardReveal(_event: string, msg: { suit: number; value: number; landlordSeatIndex: number }): void {
+        // AC-C4/C5: 触发暗号牌揭晓动画（≤4s，与服务端窗口对齐）
+        this.onRender?.('CODE_CARD_REVEAL', msg);
     }
 
     private _onDoublingStart(_event: string, msg: any): void {

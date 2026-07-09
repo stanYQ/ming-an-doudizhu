@@ -1,7 +1,7 @@
 [
   {
     "__type__": "cc.Prefab",
-    "_name": "CardItem",
+    "_name": "MinCardPrefab",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_native": "",
@@ -13,7 +13,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "CardItem",
+    "_name": "MinCardPrefab",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": null,
@@ -155,8 +155,8 @@
     },
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": -10.257011413574219,
-      "y": 29.55,
+      "x": -6.257011413574219,
+      "y": 23.55,
       "z": 0
     },
     "_lrot": {
@@ -834,8 +834,8 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 52,
-      "height": 78
+      "width": 44,
+      "height": 66
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -865,7 +865,7 @@
     "_dstBlendFactor": 4,
     "_color": {
       "__type__": "cc.Color",
-      "r": 153,
+      "r": 0,
       "g": 255,
       "b": 0,
       "a": 255
@@ -956,8 +956,8 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 52,
-      "height": 78
+      "width": 44,
+      "height": 66
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",

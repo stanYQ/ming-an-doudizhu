@@ -162,11 +162,17 @@ client/assets/
     ├── ui/
     │   ├── ctrl/    <- CC Component Ctrl（Ctrl 层）
     │   └── view/    <- 旧 Logic 文件（过渡期保留，等同 logic/ 层规则）
-    └── shared/      <- 只读！不改！
+    └── shared/      <- 🤖 自动同步目标（禁止手动改动）
 ```
 
+**shared 层规则**（TASK-051B）:
+- ✅ **导入**: `import { CardEncoding } from '../shared/CardEncoding';`（相对路径）
+- ❌ **禁止**: 手动修改 `client/assets/scripts/shared/` 内容（自动同步目标）
+- 🔄 **同步**: 修改 `/shared/` 后执行 `npm run sync:shared`（或 `npm install` 自动触发）
+- 📍 **Source of Truth**: `/shared/`（单一数据源）
+
 **禁止改动**:
-- `client/assets/scripts/shared/` — 只读，改动需求写 `.tasks/blocked.md`
+- `client/assets/scripts/shared/` — 自动同步目标，改动会被覆盖
 - `server/` 任何文件
 - `infra/` 任何文件
 

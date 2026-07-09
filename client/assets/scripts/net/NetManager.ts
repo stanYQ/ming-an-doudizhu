@@ -108,6 +108,7 @@ export class NetManager {
         r.onMessage('game_over',       (msg: any) => message.dispatchEvent('OVER',            msg));
         r.onMessage('turn_change',     (msg: any) => message.dispatchEvent('TURN',            msg));
         r.onMessage('error',           (msg: any) => message.dispatchEvent('ERROR',           msg));
+        r.onMessage('code_card_reveal', (msg: any) => message.dispatchEvent('CODE_CARD_REVEAL', msg));
         r.onMessage('doubling_start',   (msg: any) => message.dispatchEvent('DOUBLING_START',   msg));
         r.onMessage('landlord_doubled', (msg: any) => message.dispatchEvent('LANDLORD_DOUBLED', msg));
         r.onMessage('doubling_result',  (msg: any) => message.dispatchEvent('DOUBLING_RESULT',  msg));
@@ -140,6 +141,11 @@ export class NetManager {
      */
     selectCodeCard(suit: number, value: number): void {
         this._room?.send('select_code_card', { suit, value });
+    }
+
+    /** 发送发牌动画完成确认（发牌阶段客户端动画结束后调用）。 */
+    sendDealingReady(): void {
+        this._room?.send('dealing_ready');
     }
 
     /** 断线重连后同步当前游戏状态。 */

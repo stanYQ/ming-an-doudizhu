@@ -6,6 +6,8 @@
   },
   "version": "3.8.8",
   "scripts": {
+    "sync:shared": "node scripts/sync-shared.js",
+    "postinstall": "npm run sync:shared",
     "test": "jest --forceExit",
     "test:unit": "jest --testPathPattern='(?<!\\.integration)\\.test\\.ts$' --forceExit",
     "test:integration": "jest --testPathPattern=integration --forceExit"

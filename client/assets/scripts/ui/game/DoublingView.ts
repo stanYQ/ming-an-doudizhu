@@ -4,7 +4,7 @@
  * @layer ctrl
  * @module client/ui/game
  */
-import { _decorator, Component, Label, Button } from 'cc';
+import { _decorator, Component, Label, Button, tween, Vec3, Color } from 'cc';
 import { oops } from 'db://oops-framework/core/Oops';
 import { UIId } from '../../config/UIId';
 
@@ -37,7 +37,7 @@ export class DoublingView extends Component {
     private _submitted     = false;
     private _remaining     = 0;
 
-    /** oops.gui.open 时框架调用。 */
+    /** oops.gui.open 时框架调用。AC-1: 从屏幕顶部滑入。 */
     onAdded(data: { msg: DoublingStartMsg; mySeatIndex: number; onSetDouble: (v: 1 | 2) => void }): void {
         this._mySeatIndex = data.mySeatIndex;
         this._onSetDouble = data.onSetDouble;
@@ -46,6 +46,13 @@ export class DoublingView extends Component {
         const isLandlord = data.msg.landlordSeatIndex === this._mySeatIndex;
         this.statusLabel.string = isLandlord ? '选择加倍倍数' : '等待地主选择…';
         this._setButtons(isLandlord);
+
+        // AC-1: 从顶部滑入
+        this.node.setPosition(640, 800);
+        tween(this.node)
+            .to(0.25, { position: new Vec3(640, 500, 0) }, { easing: 'backOut' })
+            .start();
+
         this._startCountdown(data.msg.timeout);
     }
 
@@ -71,7 +78,10 @@ export class DoublingView extends Component {
 
     hide(): void {
         this.unscheduleAllCallbacks();
-        oops.gui.remove(UIId.DoublingView);
+        tween(this.node)
+            .to(0.2, { position: new Vec3(640, 800, 0) }, { easing: 'backIn' })
+            .call(() => oops.gui.remove(UIId.DoublingView))
+            .start();
     }
 
     onSingleClick(): void { this._submit(1); }
@@ -94,6 +104,10 @@ export class DoublingView extends Component {
     private _onTick = (): void => {
         this._remaining--;
         this.timerLabel.string = String(this._remaining);
+        // AC-7: ≤10s 变红色
+        this.timerLabel.color = this._remaining <= 10
+            ? new Color('#C0392B')
+            : new Color('#FFFFFF');
         if (this._remaining <= 0) {
             this.unschedule(this._onTick);
             this._setButtons(false);

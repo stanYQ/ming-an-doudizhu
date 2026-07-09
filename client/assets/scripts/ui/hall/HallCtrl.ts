@@ -2,6 +2,8 @@
  * @file HallCtrl.ts
  * @description 主大厅 Controller：持有场景节点，将 HallLogic 事件转化为节点操作。
  *              弹层通过 oops.gui.open/remove 管理，mode 经 oops.storage 传递给 MatchCtrl。
+ *              快速匹配强制最小展示时长 MIN_MATCH_DISPLAY_MS（3 秒），避免服务端秒补 AI 导致
+ *              MatchView 一闪而过，玩家无匹配感知。
  * @layer ctrl
  * @module client/ui/ctrl
  */
@@ -32,7 +34,11 @@ export class HallCtrl extends Component {
     @property(Button) activityBtn!: Button;
     @property(Button) rankingBtn!:  Button;
 
-    private _hallLogic!: HallLogic;
+    private static readonly MIN_MATCH_DISPLAY_MS = 3000;
+
+    private _hallLogic!:          HallLogic;
+    private _matchStartTime       = 0;
+    private _pendingStartTimer:   ReturnType<typeof setTimeout> | null = null;
 
     onLoad() {
         const token = oops.storage?.get('ddz_token') ?? null;
@@ -55,6 +61,7 @@ export class HallCtrl extends Component {
     }
 
     onDestroy() {
+        this._clearPendingStart();
         this._hallLogic?.destroy();
     }
 
@@ -63,12 +70,41 @@ export class HallCtrl extends Component {
     private _render(event: string, _data: unknown): void {
         switch (event) {
             case 'MATCH_CANCELLED':
+                this._clearPendingStart();
                 try { oops.gui.remove(UIId.MatchView); } catch { /* 尚未打开则忽略 */ }
                 break;
             case 'GAME_STARTED':
-                try { oops.gui.remove(UIId.MatchView); } catch { /* 尚未打开则忽略 */ }
-                director.loadScene('GameScene');
+                this._handleGameStarted();
                 break;
+        }
+    }
+
+    // ── GAME_STARTED 延迟处理（最小展示时长）────────────────────────────────
+
+    /** 确保 MatchView 至少展示 MIN_MATCH_DISPLAY_MS，不足则延迟跳转 */
+    private _handleGameStarted(): void {
+        const remaining = HallCtrl.MIN_MATCH_DISPLAY_MS - (Date.now() - this._matchStartTime);
+        if (remaining > 0) {
+            this._pendingStartTimer = setTimeout(() => {
+                this._pendingStartTimer = null;
+                this._transitionToGame();
+            }, remaining);
+        } else {
+            this._transitionToGame();
+        }
+    }
+
+    private _transitionToGame(): void {
+        this._matchStartTime = 0;
+        oops.storage?.remove('match_mode');
+        try { oops.gui.remove(UIId.MatchView); } catch { /* 尚未打开则忽略 */ }
+        director.loadScene('GameScene');
+    }
+
+    private _clearPendingStart(): void {
+        if (this._pendingStartTimer) {
+            clearTimeout(this._pendingStartTimer);
+            this._pendingStartTimer = null;
         }
     }
 
@@ -77,7 +113,9 @@ export class HallCtrl extends Component {
     onQuickMatchClick(): void {
         oops.storage?.set('match_mode', 'quick');
         oops.gui.open(UIId.MatchView);
+        this._matchStartTime = Date.now();
         this._hallLogic.startQuickMatch().catch((err: any) => {
+            this._clearPendingStart();
             try { oops.gui.remove(UIId.MatchView); } catch { /* ignore */ }
             oops.gui.toast(err?.message ?? '匹配失败，请重试');
         });
@@ -86,6 +124,7 @@ export class HallCtrl extends Component {
     onFriendRoomClick(): void {
         oops.storage?.set('match_mode', 'friend');
         oops.gui.open(UIId.MatchView);
+        this._matchStartTime = Date.now();
     }
 
     onRulesClick(): void {

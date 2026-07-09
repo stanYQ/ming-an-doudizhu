@@ -5,7 +5,7 @@
  * @layer ctrl
  * @module client/ui/ctrl
  */
-import { _decorator, Component, Label, Sprite, Node } from 'cc';
+import { _decorator, Component, Label, Sprite, Node, Color } from 'cc';
 
 const { ccclass, property } = _decorator;
 
@@ -15,6 +15,7 @@ export interface SeatData {
     handCount:      number;
     isCurrentTurn:  boolean;
     turnDeadline?:  number;
+    isAI?:          boolean;
 }
 
 @ccclass('PlayerSeat')
@@ -27,6 +28,8 @@ export class PlayerSeat extends Component {
     @property(Node)   badgeNode!:      Node;
     @property(Label)  badgeLabel!:     Label;
     @property(Node)   finishedNode!:   Node;
+    @property(Node)   aiBadgeNode!:    Node;
+    @property(Node)   passBubbleNode!: Node;  // 「不要」气泡
 
     seatIndex = 0;
 
@@ -41,6 +44,7 @@ export class PlayerSeat extends Component {
         if (this.nicknameLabel)  this.nicknameLabel.string  = data.nickname;
         if (this.handCountLabel) this.handCountLabel.string = `剩 ${data.handCount} 张`;
         if (this.finishedNode)   this.finishedNode.active   = data.handCount === 0;
+        if (this.aiBadgeNode)    this.aiBadgeNode.active    = data.isAI === true;
         if (data.isCurrentTurn && data.turnDeadline) {
             this.startTurnRing(data.turnDeadline);
         } else {
@@ -65,6 +69,11 @@ export class PlayerSeat extends Component {
         const remaining = this._deadline - Date.now();
         if (this.ringFill) {
             this.ringFill.fillRange = Math.max(0, remaining / this._totalMs);
+            // AC-24: >15s 金色，10-15s 黄色，<10s 红色
+            const sec = remaining / 1000;
+            this.ringFill.color = sec > 15 ? new Color('#F0C040')
+                                : sec > 10 ? new Color('#F0D020')
+                                : new Color('#C0392B');
         }
         if (remaining <= 0) this.stopTurnRing();
     };
@@ -88,6 +97,15 @@ export class PlayerSeat extends Component {
             if (this.badgeLabel) this.badgeLabel.string = role === 'landlord' ? '地主' : '搭档';
             if (this.badgeNode)  this.badgeNode.active  = true;
         }
+    }
+
+    /** AC-12: 显示「不要」气泡，500ms 后自动消失。 */
+    showPassBubble(): void {
+        if (!this.passBubbleNode) return;
+        this.passBubbleNode.active = true;
+        this.scheduleOnce(() => {
+            if (this.passBubbleNode) this.passBubbleNode.active = false;
+        }, 0.5);
     }
 
     /** 标记该席位玩家已出完所有手牌。 */

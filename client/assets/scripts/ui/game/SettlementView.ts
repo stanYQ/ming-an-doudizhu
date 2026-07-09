@@ -5,7 +5,7 @@
  * @layer ctrl
  * @module client/ui/game
  */
-import { _decorator, Component, Label, Button } from 'cc';
+import { _decorator, Component, Label, Button, tween, UIOpacity } from 'cc';
 import { oops } from 'db://oops-framework/core/Oops';
 import { UIId } from '../../config/UIId';
 
@@ -38,7 +38,8 @@ export interface SettlementData {
 
 export interface GameOverMsg {
     winnerCamp:  0 | 1;
-    scores?:     Array<{ sessionId: string; scoreDelta: number; newScore: number }>;
+    scores?:     Record<string, number>;
+    players?:    Array<{ sessionId: string; nickname: string; role: 'landlord'|'partner'|'civilian'; scoreDelta: number; newScore: number|null; seatIndex: number }>;
     breakdown?:  BreakdownV2;
     multiplier?: number;
 }
@@ -54,6 +55,7 @@ const BASE_SCORE_LABELS: Record<number, string> = { 1: '入门场', 2: '休闲�
 export class SettlementView extends Component {
 
     @property(Label)  bannerLabel!:        Label;
+    @property(Label)  scoresLabel!:        Label;  // 分数摘要
     @property(Button) playAgainBtn!:       Button;
     @property(Button) returnHallBtn!:      Button;
     @property(Label)  rematchStatusLabel!: Label;  // .node.active 控制显隐
@@ -67,7 +69,7 @@ export class SettlementView extends Component {
     private _animating      = false;
     private _rematchPending = false;
 
-    /** oops.gui.open 时框架调用。 */
+    /** oops.gui.open 时框架调用。带 fade-in 入场动画。 */
     onAdded(data: {
         msg:                 GameOverMsg;
         requestRematch:      () => void;
@@ -79,6 +81,15 @@ export class SettlementView extends Component {
         this._leaveRoom            = data.leaveRoom;
         this._navigateToHall       = data.navigateToHall;
         this._navigateToQuickMatch = data.navigateToQuickMatch;
+
+        // fade-in 入场动画
+        const uiOpacity = this.node.getComponent(UIOpacity) ?? this.node.addComponent(UIOpacity);
+        uiOpacity.opacity = 0;
+        tween(uiOpacity)
+            .to(0.35, { opacity: 255 })
+            .call(() => this.finishAnimation())
+            .start();
+
         this.showResult(data.msg);
     }
 
@@ -96,11 +107,11 @@ export class SettlementView extends Component {
      * V2 含 breakdown 显示明细；缺失降级为 V1。
      */
     showResult(msg: GameOverMsg): void {
-        const players: PlayerResult[] = (msg.scores ?? []).map(s => ({
-            playerId:   s.sessionId,
-            nickname:   '',
-            role:       'civilian' as const,
-            scoreDelta: s.scoreDelta,
+        const players: PlayerResult[] = (msg.players ?? []).map(p => ({
+            playerId:   p.sessionId,
+            nickname:   p.nickname,
+            role:       p.role,
+            scoreDelta: p.scoreDelta,
             isMe:       false,
         }));
         this.show({
@@ -110,6 +121,14 @@ export class SettlementView extends Component {
             multiplierDetail: { mode: 1, bombCount: 0, rocketCount: 0 },
             breakdown:        msg.breakdown,
         });
+
+        // 填充分数摘要
+        if (this.scoresLabel && msg.players?.length) {
+            const lines = msg.players.map(p =>
+                `${this.formatScore(p.scoreDelta)}（余额: ${p.newScore}）`
+            );
+            this.scoresLabel.string = lines.join('  |  ');
+        }
     }
 
     hide(): void { oops.gui.remove(UIId.SettlementView); }
