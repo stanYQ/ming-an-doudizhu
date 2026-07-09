@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ln -s ../../../shared shared)",
+      "Bash(SKIP_DEALING_READY=1 npm test)"
+    ]
+  }
+}
