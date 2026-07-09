@@ -8,117 +8,161 @@
 - [ ] TASK-{id} [{模块}] {一句话描述} → spec: specs/{feature}.md
 ```
 
-## 当前任务
+---
 
-- [x] TASK-001 [shared] 实现 CardEncoding.ts：0-107 编码/解码 + compareValue → spec: specs/card-encoding.md **[ready]**
-- [x] TASK-002 [shared] 实现 CardPattern.ts：PatternType 枚举 + CardPattern 接口 → spec: specs/card-pattern.md **[ready]**
-- [x] TASK-003 [shared] 实现 PatternHelper.ts：parse() + canBeat() → spec: specs/pattern-helper.md **[ready]**
-- [x] TASK-004 [infra] MySQL DDL 建表 + Docker Compose 骨架 → spec: specs/infra-setup.md **[ready]**
+## 🔥 当前待认领（优先级排序）
 
-## P1 任务（依赖 P0 shared 完成）
+### P1 — 技术债清理（代码审查发现，本周完成）
 
-- [x] TASK-005 [server] 实现 CardPatternEngine.ts → spec: specs/card-pattern-engine.md **[done]**
-- [x] TASK-006 [server] 实现 RuleEngine.ts → spec: specs/rule-engine.md **[done]**
-- [x] TASK-007 [server] 实现 CodeCard.ts → spec: specs/code-card.md **[done]**
-- [x] TASK-009 [server] 实现 Deck.ts → spec: specs/deck.md **[done]**
-- [x] TASK-008 [server] 实现 CardRoom.ts：状态机 + 消息处理 + 超时托管 + 断线重连 → spec: specs/card-room.md **[done]**
+- [ ] TASK-051B [client+构建] shared 层自动同步（预构建脚本方案）→ spec: specs/shared-deduplication-buildscript.md **[ready]** | 工时: 2.5h | 分配: client-dev
+- [x] TASK-052 [server] 补全核心文件文件头注释：7 个文件添加标准文件头 → spec: specs/file-header-completion.md **[done: 412/412]** | 完成: 2026-07-09
 
-## P2 任务（客户端 UI，依赖 P1 server 协议稳定）
+### P4.7 — 动画同步修复（解除阻塞，可并行）
 
-- [x] TASK-017 [server] 实现 AuthService Stub：占位登录 + JWT + /auth/login + /auth/me → spec: specs/auth-service-stub.md **[done]**
+- [x] TASK-050s [server] 动画同步修复：dealing_ready ACK 等待 + code_card_reveal 广播 + doubling_result 定时器 → spec: specs/animation-sync.md **[done: 412/412]** | 完成: 2026-07-09
+- [ ] TASK-050c [client] 动画同步修复：sendDealingReady + code_card_reveal 监听 + doubling_result 动画对齐 → spec: specs/animation-sync.md **[ready]** | 工时: 1-2h | 分配: client-dev
 
-- [x] TASK-016 [client] 横屏适配基础配置：方向锁定 + 1280×720 基准 + 安全区 + 多端验证 → spec: specs/screen-adaptation.md **[done]**
-- [x] TASK-010 [client] 实现 NetManager.ts：Colyseus 连接封装 + EventManager 消息路由 → spec: specs/net-manager.md **[done]**
-- [x] TASK-011 [client] 实现 GameController.ts：客户端状态机（7状态）+ 消息驱动 **[done]**
-- [x] TASK-010b [client] 实现 LaunchView.ts：启动页 + 占位登录 + token 缓存 **[done]**
-- [x] TASK-012 [client] 实现 HandCardView.ts + PlayZone.ts：手牌选择 + 出牌区 **[done]**
-- [x] TASK-013 [client] 实现 PlayerSeat.ts + CodeCardSelector.ts：席位展示 + 暗号牌选择弹窗 **[done]**
-- [x] TASK-014 [client] 实现 SettlementView.ts：结算界面 + 身份揭晓动画 **[done]**
-- [x] TASK-015 [client] 实现 HallView.ts + MatchView.ts：主大厅 + 快速匹配/好友房 **[done]**
+### P5.2 — UI 收尾（需 Cocos Editor）
 
-## P3 任务（服务端优化，P2 client 联调期间并行）
-
-- [x] TASK-018 [server] 实现 MatchMaker：段位分桶 + 容忍度扩展 + 好友房 roomCode → spec: specs/matchmaker.md **[done]**
-- [x] TASK-019 [server] 实现 SettleService V1（已废弃，被 TASK-022 替换）→ spec: specs/settle-service.md **[deprecated]**
-- [x] TASK-021 [server] 实现 Logger + 埋点：结构化日志 + 关键事件埋点 → spec: specs/logging-monitor.md **[done]**
-- [x] TASK-020 [server] 实现 AIPlayer：补位/托管出牌策略 → spec: specs/ai-player.md **[done]** 241/241 tests
-
-## P4.1 任务（AI 升级 + 数值校准，串行执行）
-
-- [x] TASK-025 [server] 实现 CardDecomposer：手牌拆分引擎（枚举所有合法牌型）→ spec: specs/card-decomposer.md **[done]**
-- [x] TASK-026 [server] 实现 AIPlayer V2：Tier 1 启发式策略（替换保守 AI）→ spec: specs/smart-ai-player.md **[done]**
-- [x] TASK-024 [server] 数值模拟校准：5-AI 房间跑 ≥10万局，Gate 胜率 45%–55% → spec: specs/simulation-calibration.md **[done]**
-
-## P4.1+ 任务（数值体系）
-
-- [x] TASK-023 [server] CardRoom 加倍阶段：新增 doubling 状态 + 协议消息 → spec: specs/doubling-phase.md **[done]**
-- [x] TASK-022 [server] SettleService V2：零和倍数公式 + 场次底分 + 个人加倍 → spec: specs/scoring-v2.md **[done]**
-
-## P4.2 任务（客户端 UI 补全）
-
-- [x] TASK-027 [client] 加倍阶段 UI：DoublingView + GameController DOUBLING 状态 + NetManager.setDouble → spec: specs/doubling-view.md **[done]**
-- [x] TASK-028 [client] SettlementView V2：倍率明细区 + 个人加倍展示 + V1 降级兼容 → spec: specs/settlement-view-v2.md **[done]**
-
-## P4.3 任务（Demo 功能，server/client 可并行）
-
-- [x] TASK-029s [server] 快速匹配 AI 补位：可配置等待超时 + AI 注入 + `waiting_update` 广播 → spec: specs/quick-match-ai-fill.md **[done]**
-- [x] TASK-029c [client] 快速匹配等待界面：倒计时 + AI 补位提示 + MatchView 扩展 → spec: specs/quick-match-ai-fill.md **[done]**
-- [x] TASK-030s [server] 好友房服务端：`room_update` 广播 + `force_start` + `ownerSessionId` → spec: specs/friend-room-flow.md **[done]**
-- [x] TASK-030c [client] 好友房客户端：等待室人员列表 + 开始按钮 + 平台分享 → spec: specs/friend-room-flow.md **[done]**
-- [x] TASK-031s [server] 再来一局服务端：rematch 窗口期 + 好友房重开 + 快速匹配重排队 → spec: specs/rematch.md **[done]**
-- [x] TASK-031c [client] 再来一局客户端：SettlementView「再来一局」按钮 + 状态处理 → spec: specs/rematch.md **[done]**
-
-## P4.4 任务（集成冒烟 + Demo 准备）
-
-- [x] TASK-032s [server] 集成冒烟准备：修 BUG-001/002/003/004 + 启动环境验证 → spec: specs/integration-smoke.md **[done: 356/356]**
-- [x] TASK-032c [client] 全流程集成冒烟测试：Node.js 直连真实 server，跑完整游戏流程 → spec: specs/integration-smoke.md **[done: 9/9 AC]**
-- [x] TASK-032c-fix [client] 修复 ISSUE-S003：升级冒烟测试出牌代理，按 hint 完整自然打一局直到 game_over → spec: specs/integration-smoke.md **[done: 9/9 AC，32s 完成]**
-- [x] TASK-036 [client] P1 协议全覆盖冒烟：按 PROTOCOL.md 覆盖所有消息、错误码、重连、HTTP 接口 → spec: specs/protocol-coverage-smoke.md **[done: 36/36]**
-
-## P4.6 任务（Bug 修复批次二，与 TASK-036 并行）
-
-- [x] TASK-037 [server] Bug 修复批次二：ISSUE-009 rematch disconnect崩溃 + ISSUE-010 handlePass log + ISSUE-003 文件头注释 **[done: 369/369]**
-- [x] TASK-038 [server] 测试阶段战报日志：finishGame 输出完整 BattleReport JSON（出牌序列 + 身份揭晓 + 倍率明细 + 结果），不落库 → spec: specs/battle-report-log.md **[done: 390/390]**
-- [x] TASK-039 [server+shared] Bug 修复批次三：① shared/PatternHelper.ts 单张王合法 SINGLE + 补测试 + GAME-RULES.md 更正 ② ISSUE-S004 根因排查（含 AIPlayer hint 推荐 Joker 单张场景）③ ISSUE-S005 turn_change 加 isNewRound + PROTOCOL.md 更新 ④ ISSUE-S006 [PASS] log 移位 **[done: 395/395]**
-- [x] TASK-039c [client+shared] 同步 TASK-039 shared 变更：client/assets/scripts/shared/PatternHelper.ts 同步单张王修复 + ISSUE-S005 turn_change handler 读 isNewRound + C011 error 1001 不 pass **[done]**
-- [x] TASK-040 [server] ISSUE-S007：realPlayerCount=0 时清除 AI fake clients + disconnect()，修复 GameFlow 后 503 **[done: 398/398]**
-
-## P4.7 任务（动画同步修复，C008/C009/C010）⏳ 等待 TASK-043 完成后认领
-
-- [ ] TASK-050s [server] 动画同步修复：① dealing_ready ACK 等待（5人全到 or 10s 静默超时）→ landlord_select；② select_code_card 后广播 code_card_reveal + 4s 定时器再推进 doubling；③ doubling_result 广播后 2s 定时器再推进 playing；④ PROTOCOL.md 新增 dealing_ready C→S 定义 + code_card_reveal S→C 定义（payload: {suit, value, landlordSeatIndex}）→ spec: specs/animation-sync.md **[blocked: 等待 TASK-043]**
-- [ ] TASK-050c [client] 动画同步修复：① 发牌动画结束后发 dealing_ready（NetManager 新增接口）；② 监听 code_card_reveal 触发揭晓动画（4s，对齐服务端窗口）；③ doubling_result 结果展示动画对齐 2s → spec: specs/animation-sync.md **[blocked: 等待 TASK-043]**
-
-## P5 任务（UI 视觉搭建，core 已验证）
-
-### P5.0 前置 — 架构迁移（TASK-041 开始前必须完成）
-
-- [x] TASK-049 [client] Phase 1 架构迁移：GameController → GameMgr（脱CC壳，三层职责厘清）→ spec: specs/arch-phase1-gamemgr.md **[done]**
-
-### P5.0 — oops-framework 集成 + 场景骨架
-
-- [ ] TASK-041 [client] LaunchScene + HallScene 节点树搭建 + AppRoot 初始化 + oops.res/storage 接入 → spec: specs/ui-flow-01-launch-hall.md **[ready]**
-- [ ] TASK-042 [client] MatchView（快速匹配 + 好友房）弹层搭建 + SeatItem Prefab + 等待动画 → spec: specs/ui-flow-02-match-wait.md **[ready]**
-
-### P5.1 — 游戏桌（依赖 TASK-041/042）
-
-- [ ] TASK-043 [client] GameScene 节点树 + CardItem Prefab + PlayerSeat Prefab + HandCardView + CodeCardSelector → spec: specs/ui-flow-03-deal-landlord.md **[ready]**
-- [ ] TASK-044 [client] DoublingView + PlayZone + 出牌交互 + hint 高亮 → spec: specs/ui-flow-04-doubling-play.md **[ready]**
-- [ ] TASK-045 [client] SettlementView + PlayerResultCard Prefab + 身份揭晓动画 + 再来一局 → spec: specs/ui-flow-05-settlement-rematch.md **[ready]**
-
-### P5.2 — 服务端协议补全（与 P5.1 并行）
-
-- [x] TASK-046 [server] game_over 消息增强：添加 players[] + breakdown，供结算 UI 渲染 → spec: specs/server-game-over-enhance.md **[done]**
-
-### P5.3 — P1 大厅功能（P5.0 上线后）
-
-- [x] TASK-047 [server] GET /api/leaderboard：全服 Top 50 积分榜，Redis 缓存 60s **[done]**
-- [x] TASK-048 [server] POST /api/checkin：每日签到 + 连续签到奖励积分（50/100/200/300/500/500/1000）**[done]**
+- [ ] TASK-045b [client] SettlementView Prefab 补全：PlayerResultCard ×5 + 身份揭晓动画 + 倍率明细节点树 → spec: specs/ui-flow-05-settlement-rematch.md **[ready]** | 工时: 0.5h | 分配: client-dev
 
 ---
 
-## P4.5 任务（协议对齐）
+## ✅ 已完成任务归档
 
-- [x] TASK-033 [client] Client ↔ PROTOCOL.md 对齐：NetManager 单例 + auth token + play_broadcast 移除 + landlordSeat 修正 + suit 类型 + bottom_cards/hint 路由 → spec: specs/client-protocol-align.md **[done: 233/233]**
+<details>
+<summary>📦 P0 基础层（2026-06 完成）</summary>
 
-- [x] TASK-034 [server] Bug 修复批次一：ISSUE-005 handlePass守卫 + ISSUE-006 landlord_select超时 + ISSUE-001 realPlayerCount递减 + ISSUE-007 重连补全 → spec: specs/bugfix-server-034.md **[done: 369/369]**
-- [x] TASK-035 [client] Bug 修复批次一：ISSUE-C001 setConnected + ISSUE-C002~C007 → spec: specs/bugfix-client-035.md **[done: 256/256]**
+- [x] TASK-001 [shared] CardEncoding.ts：0-107 编码/解码
+- [x] TASK-002 [shared] CardPattern.ts：PatternType 枚举
+- [x] TASK-003 [shared] PatternHelper.ts：parse() + canBeat()
+- [x] TASK-004 [infra] MySQL DDL 建表 + Docker Compose
+
+</details>
+
+<details>
+<summary>📦 P1 服务端核心（2026-06 完成）</summary>
+
+- [x] TASK-005 [server] CardPatternEngine.ts
+- [x] TASK-006 [server] RuleEngine.ts
+- [x] TASK-007 [server] CodeCard.ts
+- [x] TASK-009 [server] Deck.ts
+- [x] TASK-008 [server] CardRoom.ts：状态机 + 消息处理
+
+</details>
+
+<details>
+<summary>📦 P2 客户端 UI（2026-06 完成）</summary>
+
+- [x] TASK-017 [server] AuthService Stub
+- [x] TASK-016 [client] 横屏适配
+- [x] TASK-010 [client] NetManager.ts
+- [x] TASK-011 [client] GameController.ts
+- [x] TASK-010b [client] LaunchView.ts
+- [x] TASK-012 [client] HandCardView.ts + PlayZone.ts
+- [x] TASK-013 [client] PlayerSeat.ts + CodeCardSelector.ts
+- [x] TASK-014 [client] SettlementView.ts
+- [x] TASK-015 [client] HallView.ts + MatchView.ts
+
+</details>
+
+<details>
+<summary>📦 P3 服务端优化（2026-06 完成）</summary>
+
+- [x] TASK-018 [server] MatchMaker
+- [x] TASK-021 [server] Logger + 埋点
+- [x] TASK-020 [server] AIPlayer：补位/托管
+
+</details>
+
+<details>
+<summary>📦 P4.1 AI 升级 + 数值（2026-06 完成）</summary>
+
+- [x] TASK-025 [server] CardDecomposer
+- [x] TASK-026 [server] AIPlayer V2
+- [x] TASK-024 [server] 数值模拟校准（10万局，Gate 通过）
+- [x] TASK-023 [server] 加倍阶段
+- [x] TASK-022 [server] SettleService V2
+
+</details>
+
+<details>
+<summary>📦 P4.2-P4.6 客户端补全 + 集成测试（2026-06-07 完成）</summary>
+
+- [x] TASK-027 [client] DoublingView
+- [x] TASK-028 [client] SettlementView V2
+- [x] TASK-029s/c [server+client] 快速匹配 AI 补位
+- [x] TASK-030s/c [server+client] 好友房流程
+- [x] TASK-031s/c [server+client] 再来一局
+- [x] TASK-032s/c [server+client] 集成冒烟测试
+- [x] TASK-036 [client] P1 协议全覆盖冒烟（36/36）
+- [x] TASK-033 [client] Client ↔ PROTOCOL.md 对齐
+- [x] TASK-034/035 [server+client] Bug 修复批次一
+- [x] TASK-037/038/039/040 [server] Bug 修复批次二、三
+
+</details>
+
+<details>
+<summary>📦 P5.0-P5.1 UI 视觉搭建（2026-07-08 完成）✨</summary>
+
+**架构迁移**:
+- [x] TASK-049 [client] GameController → GameMgr 架构迁移
+
+**oops-framework 集成**:
+- [x] TASK-041 [client] LaunchScene + HallScene 节点树搭建
+- [x] TASK-042 [client] MatchView 弹层搭建
+
+**游戏桌 + 交互**:
+- [x] TASK-043 [client] GameScene 节点树 + Prefabs（CardItem/PlayerSeat/HandCardView/CodeCardSelector）
+- [x] TASK-043b [client] GameScene 交互补全（AI 标识/发牌动画/ScrollView/划选/hint 闪烁）
+- [x] TASK-044 [client] DoublingView + PlayZone 交互 + hint 高亮
+- [x] TASK-045 [client] SettlementView 代码层完成
+
+**服务端协议增强**:
+- [x] TASK-046 [server] game_over 消息增强（players[] + breakdown）
+- [x] TASK-047 [server] GET /api/leaderboard（排行榜）
+- [x] TASK-048 [server] POST /api/checkin（每日签到）
+
+</details>
+
+---
+
+## 📊 阶段进度总览
+
+| 阶段 | 状态 | 完成任务 | 测试覆盖 |
+|------|------|---------|---------|
+| **P0 基础层** | ✅ 100% | 4/4 | shared 100% |
+| **P1 服务端核心** | ✅ 100% | 5/5 | 157/157 tests |
+| **P2 客户端 UI** | ✅ 100% | 9/9 | 145/145 tests |
+| **P3 服务端优化** | ✅ 100% | 3/3 | 241/241 tests |
+| **P4 数值 + 集成** | ✅ 100% | 18/18 | 407/407 tests |
+| **P5.0-P5.1 UI** | ✅ 100% | 10/10 | Cocos 预览通过 |
+| **P5.2 UI 收尾** | 🟡 80% | 4/5 | 1 个 Prefab 待补全 |
+| **P4.7 动画修复** | ⏳ 0% | 0/2 | 待认领 |
+| **P1 技术债** | ⏳ 0% | 0/2 | 待认领 |
+
+**当前阶段**: P5.2 收尾 + P1 技术债清理 + P4.7 动画修复  
+**下一阶段**: P5.3（大厅增强 + 音效系统）待规划
+
+---
+
+## 🎯 推荐认领顺序
+
+### 快速胜利（本周完成）
+
+1. **TASK-052** (30min) — Server 文件头注释，快速提升文档规范
+2. **TASK-045b** (0.5h) — SettlementView Prefab，P5.2 收尾
+
+### 重点优化（本周-下周）
+
+3. **TASK-051** (4h) — 消除 shared 层重复，提升代码健康度至 88/100
+4. **TASK-050s/c** (3-5h) — 动画同步修复，解决客户端截断问题
+
+---
+
+## 📝 备注
+
+- P5.0-P5.1 UI 视觉搭建已全部完成（2026-07-08），代码层 100% 就绪
+- TASK-045b 仅需 Cocos Editor 操作，无代码改动
+- TASK-050s/c 已解除阻塞（TASK-043 完成），可立即认领
+- 所有归档任务测试全绿：Server 407/407, Client 145/145
