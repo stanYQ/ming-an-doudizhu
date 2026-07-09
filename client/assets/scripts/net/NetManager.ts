@@ -55,8 +55,12 @@ export class NetManager {
      * 服务端生成 roomCode 并通过 room_update 广播给房主。
      */
     async createFriendRoom(): Promise<void> {
-        this._room = await this.client.create('game', { isFriendRoom: true });
-        this._registerHandlers();
+        try {
+            this._room = await this.client.create('game', { isFriendRoom: true });
+            this._registerHandlers();
+        } catch (e: any) {
+            message.dispatchEvent('ERROR', { code: 0, msg: e?.message ?? '创建房间失败' });
+        }
     }
 
     /**
@@ -74,10 +78,24 @@ export class NetManager {
      * @param code 6 位大写邀请码
      */
     async joinByCode(code: string): Promise<void> {
-        const res  = await fetch(`${this._httpBase}/rooms/code/${code.toUpperCase()}`);
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? 'room not found');
-        await this.joinRoomById(data.roomId);
+        try {
+            const res  = await fetch(`${this._httpBase}/rooms/code/${code.toUpperCase()}`);
+            const data = await res.json();
+            if (!res.ok) {
+                message.dispatchEvent('ERROR', { code: 2002, msg: data.error ?? 'room not found' });
+                return;
+            }
+            await this.joinRoomById(data.roomId);
+        } catch (e: any) {
+            const errMsg: string = e?.message ?? '';
+            if (errMsg.includes('full')) {
+                message.dispatchEvent('ERROR', { code: 2001, msg: errMsg });
+            } else if (errMsg.includes('not found') || errMsg.includes('room')) {
+                message.dispatchEvent('ERROR', { code: 2002, msg: errMsg });
+            } else {
+                message.dispatchEvent('ERROR', { code: 0, msg: errMsg || '加入房间失败' });
+            }
+        }
     }
 
     // 将 Colyseus room 消息路由到 oops EventManager，解耦 NetManager 与各 Controller
