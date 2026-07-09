@@ -65,3 +65,5 @@
 - [x] NEW-DEP TASK-008 新增 devDependency `@colyseus/testing@^0.15` 用于 CardRoom 集成测试 | 需要: PM确认 | 报告人: server-dev | 状态: 已确认（spec 明确要求集成测试，PM 分配 TASK-008 即隐式批准）
 
 - [x] SYNC-NOTICE [client-dev] shared/CardPattern.ts 新增 `export type Suit = number`（TASK-007 产物）| 状态: P2 全部完成（TASK-033 已含 Suit 对齐），过期关闭 | 日期: 2026-06-29
+
+- [x] TASK-042 [server] `SettleService.settle()` INSERT `game_records` 缺少 `landlord_id` 列 → 已修复：INSERT 列名单添加 `landlord_id`，参数添加 `summary.landlordId`，405 测试全通过 | 完成: server-dev | 日期: 2026-07-08
