@@ -309,6 +309,38 @@ describe("TASK-038 AC-7: BattleReport is JSON-parseable", () => {
   });
 });
 
+// ── AC-9: remainingHands 记录游戏结束时的剩余手牌数 ───────────────────────
+
+describe("TASK-038 AC-9: remainingHands in BattleReport", () => {
+  beforeEach(() => { (Logger.info as jest.Mock).mockClear(); });
+
+  it("contains remainingHands with all 5 players", () => {
+    const { room, clients } = setupPlaying();
+    send(room, "play_cards", clients[0], { cards: [0] });
+    (room as any).finishGame("p0");
+    const report = (Logger.info as jest.Mock).mock.calls.find((c: any[]) => c[0] === "[BATTLE]")![1];
+    expect(report.remainingHands).toBeDefined();
+    expect(typeof report.remainingHands).toBe("object");
+    expect(Object.keys(report.remainingHands)).toHaveLength(5);
+  });
+
+  it("remainingHands reflects actual hand counts at finish", () => {
+    const { room, clients } = setupPlaying();
+    // landlord (p0) has 21 + 3 bottom = 24 cards; others have 21
+    // Play 1 card from p0
+    send(room, "play_cards", clients[0], { cards: [0] });
+    (room as any).finishGame("p0");
+    const report = (Logger.info as jest.Mock).mock.calls.find((c: any[]) => c[0] === "[BATTLE]")![1];
+    // p0: 24 - 1 = 23 remaining
+    expect(report.remainingHands.p0).toBe(23);
+    // Other players didn't play, 21 each
+    expect(report.remainingHands.p1).toBe(21);
+    expect(report.remainingHands.p2).toBe(21);
+    expect(report.remainingHands.p3).toBe(21);
+    expect(report.remainingHands.p4).toBe(21);
+  });
+});
+
 // ── resetForRematch clears battle state ──────────────────────────────────
 
 describe("TASK-038: resetForRematch clears battle fields", () => {

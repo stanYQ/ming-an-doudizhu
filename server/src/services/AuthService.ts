@@ -1,3 +1,9 @@
+/**
+ * @file AuthService.ts
+ * @description 认证服务：Stub 模式占位登录 + JWT 签发与验证
+ * @module server/services
+ */
+
 import jwt from "jsonwebtoken";
 import type { RowDataPacket, ResultSetHeader } from "mysql2";
 import { getPool } from "../db/connection";

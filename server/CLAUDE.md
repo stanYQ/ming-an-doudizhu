@@ -183,9 +183,74 @@ waiting -> dealing -> landlord_select -> playing -> settlement -> disposed
 
 ## 常用命令
 
+```bash
+# 测试
+npx jest --no-coverage                      # 全量
+npx jest --no-coverage <file>               # 单文件
+npx jest --no-coverage -t "<pattern>"       # 按名称筛选
+
+# 启动
+npx ts-node --project tsconfig.json src/index.ts    # 启动服务端（ws://localhost:2567）
+npx ts-node tools/simulate.ts                        # 跑模拟局
+
+# 进程
+lsof -i :2567                    # 查端口占用
+kill $(lsof -t -i :2567)         # 杀掉占用端口的进程
+
+# 日志
+node tools/battle-report.js      # 提取最近一局 [BATTLE] JSON
 ```
-/tdd-gen      -> 写代码前生成测试
-/tdd-coverage -> 写完后审查覆盖漏洞
-/karpathy     -> 审查计划/diff
-/review       -> 代码 review
+
+---
+
+## TDD Guide Skill
+
+> 已安装：`~/.agents/skills/tdd-guide/SKILL.md`。覆盖 Jest / Pytest / Vitest / Mocha。
+> 对准 Karpathy 规则 #4（可验证目标）：验收标准先于代码，边界不遗漏。
+
+### 核心工作流
+
+| 动作 | 触发时机 | 效果 |
+|------|---------|------|
+| **生成测试** | 写完函数 / 写好 spec 后 | 从代码/AC 自动生成 happy path + error + edge case |
+| **覆盖分析** | `npx jest --coverage` 后 | 解析 lcov 报告，按 P0/P1/P2 排序缺口 |
+| **TDD 循环** | 写新引擎逻辑（CardPatternEngine/RuleEngine/CodeCard） | RED→GREEN→REFACTOR 引导 |
+
+### 本项目用法
+
+```bash
+# 写完新逻辑后生成测试骨架（覆盖：P0 引擎逻辑 100%）
+npx jest --no-coverage                     # 先确认现有测试全绿
+npx jest --coverage                        # 生成 lcov 报告 → 分析缺口
+# 对照 spec AC 逐条补 P0 缺口
+```
+
+**覆盖硬要求**：`CardPatternEngine` + `RuleEngine` + `CodeCard` 100%。
+
+---
+
+## great_cto Agent 调用时机
+
+> 已安装：`~/.claude/plugins/cache/local/great_cto/2.56.0/`。以下 agent 可通过 `runSubagent` 调用。
+
+| Agent | 触发时机 | 对准的 Karpathy 规则 |
+|-------|---------|:---:|
+| **architect** | 开始任何新 feature / 架构变更 | #2 最少代码（防过度设计） |
+| **qa-engineer** | senior-dev 实现完成后 | #4 可验证目标（强制测试） |
+| **project-auditor** | 定期（每 sprint）或 `PROJECT.md` 缺失时 | #3 外科手术（发现技术债） |
+| **senior-dev** | 从 `.tasks/backlog.md` 认领任务 | #1-4 全部 |
+
+### 标准流水线
+
+```
+architect → senior-dev → qa-engineer → project-auditor（定期）
+   ↓            ↓             ↓
+ ADR/doc     TDD实现      QA报告+bug
+```
+
+### 调用示例
+
+```
+/architect   → 新 feature 的架构决策 + ADR
+/audit       → 全项目代码健康审查
 ```

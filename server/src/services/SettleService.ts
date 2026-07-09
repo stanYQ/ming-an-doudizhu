@@ -167,12 +167,12 @@ export class SettleService {
       // AC-19: 写入 game_records
       const [recResult] = await conn.execute<ResultSetHeader>(
         `INSERT INTO game_records
-           (room_id, table_type, winner_camp, is_alone, multiplier, landlord_double, duration)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+           (room_id, table_type, winner_camp, is_alone, multiplier, landlord_double, duration, landlord_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           summary.roomId, summary.tableType, summary.winnerCamp,
           summary.isLandlordAlone ? 1 : 0, multiplier,
-          summary.landlordDouble, summary.duration,
+          summary.landlordDouble, summary.duration, summary.landlordId,
         ],
       );
       const gameId = recResult.insertId;
