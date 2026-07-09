@@ -10,6 +10,11 @@
 
 ## 已完成
 
+- [x] TASK-HAND-UPDATE [server] 出牌后发送 your_hand 权威修正 | 完成: server-dev | 测试: ✓ 412/412 | 日期: 2026-07-09
+      问题: handlePlay 成功后只更新 handCount，未发送 your_hand 消息导致客户端无权威修正
+      修复: handlePlay 移除手牌后立即 client.send("your_hand", { cards: hand })
+      产物: CardRoom.ts:460 + blocked.md 已解决标记
+
 - [x] TASK-050s [server] 动画同步修复：dealing_ready ACK 等待 + code_card_reveal 广播 + doubling_result 定时器 | 完成: server-dev | 测试: ✓ 412/412 | 日期: 2026-07-09
       产物: CardRoom.ts（dealing_ready handler + 3个定时器）+ CardRoom.050.test.ts（5个测试）+ PROTOCOL.md v2.1（dealing_ready + code_card_reveal 文档）
       技术债: SKIP_DEALING_READY=1 环境变量用于单元测试兼容，生产环境不设置
