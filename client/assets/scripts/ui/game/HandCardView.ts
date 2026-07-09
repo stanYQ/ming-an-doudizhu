@@ -152,25 +152,8 @@ export class HandCardView extends Component {
         });
     }
 
-    /**
-     * 乐观移除已出的牌（不等服务端 your_hand）。
-     * 服务端拒绝时靠后续 your_hand 修正。
-     */
-    removeCardsOptimistic(played: number[]): void {
-        const set = new Set(played);
-        const remaining = this._cards.filter(c => !set.has(c));
-        if (remaining.length < this._cards.length) {
-            this.render(remaining);
-        }
-    }
-
     /** PlayBtn ClickEvent 目标方法（prefab 内部自持，不跨节点引用）。 */
-    onPlayBtnClick(): void {
-        const cards = this.getSelectedCards();
-        this._onPlay(cards);
-        // 乐观更新：出牌后立即从显示中移除，不等服务端 your_hand
-        this.removeCardsOptimistic(cards);
-    }
+    onPlayBtnClick(): void { this._onPlay(this.getSelectedCards()); }
     /** PassBtn ClickEvent 目标方法。 */
     onPassBtnClick(): void { this._onPass(); }
     /** HintBtn ClickEvent 目标方法。 */
