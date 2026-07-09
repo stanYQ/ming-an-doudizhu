@@ -1,3 +1,9 @@
+/**
+ * @file Deck.ts
+ * @description 发牌引擎：Fisher-Yates 洗牌 + 5人发牌 + 明牌地主确认
+ * @module server/logic
+ */
+
 export interface DealResult {
   hands: number[][];
   bottom: number[];

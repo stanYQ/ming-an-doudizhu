@@ -10,6 +10,9 @@
 
 ## 已完成
 
+- [x] TASK-052 [server] 补全核心文件文件头注释：7 个文件添加标准文件头 | 完成: server-dev | 测试: ✓ 407/407 | 日期: 2026-07-09
+      产物: AuthService.ts（已有）+ MatchService.ts + CardPatternEngine.ts + CodeCard.ts + Deck.ts + RuleEngine.ts + connection.ts
+
 - [x] TASK-041 [client] LaunchScene + HallScene UI 搭建全量完成 | 完成: client-dev | 测试: ✓ Cocos Preview 人工验收
       产物: LaunchCtrl.ts + HallCtrl.ts + AppRoot.ts + LaunchScene.scene + HallScene.scene
       延缓: AC-12（断网横幅）—— P5.3 阶段补做，不阻塞联调
@@ -18,7 +21,21 @@
       产物: MatchCtrl.ts + match-view.prefab + mask.prefab
       延缓: AC-1/2/3（200ms 淡入出）、AC-10（三点跳动）—— 视觉打磨阶段补做，不阻塞联调
 
-- [x] TASK-049 [client] 三层架构全面对齐 | 完成: client-dev | 测试: ✓ 42/42（GameMgr unit）| 产物: client/assets/scripts/logic/{GameMgr,HandLogic,SettlementLogic,LaunchLogic}.ts, client/assets/scripts/ui/ctrl/{GameCtrl,HallCtrl,LaunchCtrl}.ts, client/tests/__tests__/GameMgr.test.ts（git mv from GameController.test.ts）; git rm GameController.ts
+- [x] TASK-043 [client] GameScene 节点树 + CardItem/Prefab + PlayerSeat/Prefab + HandCardView + CodeCardSelector（代码+Prefab+Scene 完成）| 完成: client-dev | 测试: ✓ Cocos Preview 人工验收
+      产物: GameCtrl.ts + CardItem.ts + PlayerSeat.ts + HandCardView.ts + CodeCardSelector.ts + BottomCardsDisplay.ts + PlayZone.ts + GameScene.scene（30 Nodes）+ 6 Prefabs
+      延缓: AC-8（AI 标识）+ AC-10（发牌滑入 50ms stagger）+ AC-12（>12张 ScrollView）+ AC-14（非轮次 opacity 60%）+ AC-17（划选）+ AC-21（底牌融入动画）→ 移交 TASK-043b
+
+- [x] TASK-043b [client] GameScene 交互补全 6 AC：AC-8 AI 标识 + AC-10 发牌滑入 + AC-12 ScrollView + AC-14 opacity + AC-17 划选 + AC-21 底牌融入 | 完成: client-dev | 测试: ✓ GameMgr 42/42 | 产物: PlayerSeat.ts（AI badge + passBubble + 圆环颜色）+ HandCardView.ts（deal动画 + ScrollView + opacity + 划选 + hint闪烁）+ BottomCardsDisplay.ts（merge动画）+ GameCtrl.ts（_refreshSeats + 座位数据流）+ GameMgr.ts（_turnDeadline + getCurrentSeat/getTurnDeadline）
+
+- [x] TASK-044 [client] DoublingView + PlayZone + 出牌交互 + hint 高亮 | 完成: client-dev | 测试: ✓ GameMgr 42/42 | 产物: DoublingView.ts（滑入/滑出 tween + AC-7 倒计时颜色）+ PlayZone.ts（MiniCardItem + freeRoundLabel）+ PlayerSeat.ts（passBubble + AC-24 圆环颜色）+ HandCardView.ts（AC-21/22 hint蓝闪）
+
+- [x] TASK-045 [client] SettlementView 代码层完成：入场 fade-in + 分数摘要 + 数据查询方法 | 完成: client-dev | 测试: ✓ GameMgr 42/42 | 产物: SettlementView.ts（onAdded tween + scoresLabel + finishAnimation）
+      待 Cocos Editor: PlayerResultCard Prefab + 身份揭晓动画 + 倍率明细 Prefab 节点树
+
+## P4.6+ 服务端修复/增强（2026-07-08 ~ 2026-07-09）
+
+- [x] TASK-042 [server] SettleService INSERT `game_records` 缺 `landlord_id` 列修复 | 完成: server-dev | 测试: ✓ 407/407 | 产物: SettleService.ts:175（列名单 + 参数补 landlordId）
+- [x] TASK-038-enhance [server] BattleReport 新增 `remainingHands` 字段（每人剩余手牌数）| 完成: server-dev | 测试: ✓ 407/407（含 AC-9） | 产物: CardRoom.ts（BattleReport 类型 + logBattleReport 填充）+ CardRoom.038.test.ts（AC-9 3 用例）
 
 - [x] TASK-046 [server] game_over 消息增强：players[] + breakdown | 完成: server-dev | 测试: ✓ 405/405（+8 AC-1~5）| 产物: server/src/rooms/CardRoom.ts, server/src/__tests__/CardRoom.test.ts, docs/PROTOCOL.md
 

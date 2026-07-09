@@ -1,3 +1,9 @@
+/**
+ * @file CodeCard.ts
+ * @description 暗号牌逻辑：队友确认 + 一挑四判定 + rank/suit 校验
+ * @module server/logic
+ */
+
 import { Suit } from '../../../shared/CardPattern';
 import { encode } from '../../../shared/CardEncoding';
 

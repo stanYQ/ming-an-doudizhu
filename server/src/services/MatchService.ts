@@ -1,3 +1,9 @@
+/**
+ * @file MatchService.ts
+ * @description 匹配服务：段位分桶匹配 + 好友房创建 + Redis 队列管理
+ * @module server/services
+ */
+
 import { getRedis } from "../cache/redisClient";
 
 export type Tier = "tier_1" | "tier_2" | "tier_3" | "tier_4" | "tier_5";

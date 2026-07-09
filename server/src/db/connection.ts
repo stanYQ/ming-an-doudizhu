@@ -1,3 +1,9 @@
+/**
+ * @file connection.ts
+ * @description 数据库连接池：MySQL 连接管理 + charset utf8mb4 配置
+ * @module server/db
+ */
+
 import mysql, { Pool } from "mysql2/promise";
 
 let pool: Pool | null = null;

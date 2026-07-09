@@ -1,3 +1,9 @@
+/**
+ * @file RuleEngine.ts
+ * @description 游戏规则引擎：出牌合法性校验 + 手牌所有权验证 + 胜负判定
+ * @module server/logic
+ */
+
 import { CardPattern } from '../../../shared/CardPattern';
 import { CardPatternEngine } from './CardPatternEngine';
 
