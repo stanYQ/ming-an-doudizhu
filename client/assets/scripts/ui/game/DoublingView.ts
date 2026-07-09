@@ -37,7 +37,7 @@ export class DoublingView extends Component {
     private _submitted     = false;
     private _remaining     = 0;
 
-    /** oops.gui.open 时框架调用。AC-1: 从屏幕顶部滑入。 */
+    /** oops.gui.open 时框架调用（此时节点尚未挂载到 UI 层，tween 必须延迟到下一帧）。 */
     onAdded(data: { msg: DoublingStartMsg; mySeatIndex: number; onSetDouble: (v: 1 | 2) => void }): void {
         this._mySeatIndex = data.mySeatIndex;
         this._onSetDouble = data.onSetDouble;
@@ -47,11 +47,13 @@ export class DoublingView extends Component {
         this.statusLabel.string = isLandlord ? '选择加倍倍数' : '等待地主选择…';
         this._setButtons(isLandlord);
 
-        // AC-1: 从顶部滑入
+        // AC-1: 从顶部滑入（延迟到下一帧，此时 oops 已将节点挂载到 UI 层）
         this.node.setPosition(640, 800);
-        tween(this.node)
-            .to(0.25, { position: new Vec3(640, 500, 0) }, { easing: 'backOut' })
-            .start();
+        this.scheduleOnce(() => {
+            tween(this.node)
+                .to(0.25, { position: new Vec3(640, 500, 0) }, { easing: 'backOut' })
+                .start();
+        }, 0);
 
         this._startCountdown(data.msg.timeout);
     }

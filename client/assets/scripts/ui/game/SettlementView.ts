@@ -69,7 +69,7 @@ export class SettlementView extends Component {
     private _animating      = false;
     private _rematchPending = false;
 
-    /** oops.gui.open 时框架调用。带 fade-in 入场动画。 */
+    /** oops.gui.open 时框架调用。fade-in 入场动画延迟到下一帧（此时节点已挂载到 UI 层）。 */
     onAdded(data: {
         msg:                 GameOverMsg;
         requestRematch:      () => void;
@@ -82,13 +82,15 @@ export class SettlementView extends Component {
         this._navigateToHall       = data.navigateToHall;
         this._navigateToQuickMatch = data.navigateToQuickMatch;
 
-        // fade-in 入场动画
-        const uiOpacity = this.node.getComponent(UIOpacity) ?? this.node.addComponent(UIOpacity);
-        uiOpacity.opacity = 0;
-        tween(uiOpacity)
-            .to(0.35, { opacity: 255 })
-            .call(() => this.finishAnimation())
-            .start();
+        // fade-in 入场动画：延迟到下一帧，因为 onAdded 时节点尚未挂载到 UI 层
+        this.scheduleOnce(() => {
+            const uiOpacity = this.node.getComponent(UIOpacity) ?? this.node.addComponent(UIOpacity);
+            uiOpacity.opacity = 0;
+            tween(uiOpacity)
+                .to(0.35, { opacity: 255 })
+                .call(() => this.finishAnimation())
+                .start();
+        }, 0);
 
         this.showResult(data.msg);
     }

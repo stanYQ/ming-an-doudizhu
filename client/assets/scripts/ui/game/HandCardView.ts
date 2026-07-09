@@ -4,13 +4,21 @@
  * @layer ctrl
  * @module client/ui/game
  */
-import { _decorator, Component, Label, Button, Node, Prefab, NodePool, instantiate } from 'cc';
+import { _decorator, Component, Label, Button, Node, Prefab, NodePool, instantiate, UITransform, Vec2, Vec3 } from 'cc';
 import { PatternType } from '../../shared/CardPattern';
 import { compareValue } from '../../shared/CardEncoding';
 import { parse } from '../../shared/PatternHelper';
 import { CardItem } from './CardItem';
 
 const { ccclass, property } = _decorator;
+
+/** 单张卡牌原始宽高（CardItem.prefab UITransform contentSize: 52×78） */
+const CARD_W = 52;
+const CARD_H = 78;
+/** 手牌区卡牌缩放比例 */
+const CARD_SCALE  = 1.8;
+/** 相邻卡牌可见部分宽度 */
+const CARD_VISIBLE = 42;
 
 const PATTERN_LABEL: Record<string, string> = {
     [PatternType.SINGLE]:              '单张',
@@ -48,7 +56,8 @@ export class HandCardView extends Component {
     private _interactable  = true;
     private _turnActive    = false;   // 是否轮到本人出牌
     private _passEnabled   = false;
-    private _pool!: NodePool;
+    private _pool!:         NodePool;
+    private _lastSwipedIdx  = -1;     // 滑动选中：上一次命中的卡片下标
 
     onLoad() {
         this._pool = new NodePool('CardItem');
@@ -62,14 +71,21 @@ export class HandCardView extends Component {
         this._clearCards();
         this._cards = [...cards].sort((a, b) => compareValue(a) - compareValue(b));
         this._selected.clear();
+        this._lastSwipedIdx = -1;
         this._cards.forEach((code, i) => {
             const node = this._pool.size() > 0 ? this._pool.get()! : instantiate(this.cardItemPrefab);
             node.getComponent(CardItem)!.setup(code);
+            node.setScale(CARD_SCALE, CARD_SCALE, 1);
             node.off(Node.EventType.TOUCH_END);
             node.on(Node.EventType.TOUCH_END, () => this.selectCard(i));
             this.cardContainer.addChild(node);
         });
+        this._layoutCards();
         this._updatePatternUI();
+
+        // 滑动选中：在 cardContainer 上监听 TOUCH_MOVE
+        this.cardContainer.off(Node.EventType.TOUCH_MOVE);
+        this.cardContainer.on(Node.EventType.TOUCH_MOVE, this._onSwipe, this);
     }
 
     getCards(): number[] { return this._cards; }
@@ -119,7 +135,6 @@ export class HandCardView extends Component {
     /** 整体禁用（结算/非游戏阶段）。 */
     setInteractable(enabled: boolean): void {
         this._interactable  = enabled;
-        this._turnActive    = enabled;
         this.hintButton.interactable = enabled;
         this._updatePatternUI();
         this.passButton.interactable = enabled;
@@ -149,6 +164,46 @@ export class HandCardView extends Component {
             n.off(Node.EventType.TOUCH_END);
             this._pool.put(n);
         });
+    }
+
+    /** 手牌水平排列：居中，相邻牌露出 CARD_VISIBLE px（缩放后）。 */
+    private _layoutCards(): void {
+        const children = this.cardContainer.children;
+        if (children.length === 0) return;
+        const w = CARD_W * CARD_SCALE;
+        const totalW  = w + (children.length - 1) * CARD_VISIBLE;
+        const startX  = -totalW / 2 + w / 2;
+        for (let i = 0; i < children.length; i++) {
+            children[i].setPosition(startX + i * CARD_VISIBLE, 0, 0);
+        }
+    }
+
+    /** 滑动选中：将触摸点转为 cardContainer 局部坐标，找到命中的牌并选中。 */
+    private _onSwipe(e: any): void {
+        if (!this._interactable || this._cards.length === 0) return;
+        const uiLocation = e.getUILocation?.() ?? e.getLocation?.();
+        if (!uiLocation) return;
+        const local = this.cardContainer.getComponent(UITransform)!.convertToNodeSpaceAR(new Vec3(uiLocation.x, uiLocation.y, 0));
+        const idx = this._hitTest(local.x, local.y);
+        if (idx >= 0 && idx !== this._lastSwipedIdx) {
+            this._lastSwipedIdx = idx;
+            this.selectCard(idx);
+        }
+    }
+
+    /** 碰撞检测：返回给定局部坐标命中的牌下标，未命中返回 -1。 */
+    private _hitTest(localX: number, _localY: number): number {
+        const children = this.cardContainer.children;
+        if (children.length === 0) return -1;
+        const w = CARD_W * CARD_SCALE;
+        const totalW  = w + (children.length - 1) * CARD_VISIBLE;
+        const startX  = -totalW / 2;
+        for (let i = 0; i < children.length; i++) {
+            const left  = startX + i * CARD_VISIBLE;
+            const right = left + w;
+            if (localX >= left && localX <= right) return i;
+        }
+        return -1;
     }
 
     private _updatePatternUI(): void {
