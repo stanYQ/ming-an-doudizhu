@@ -48,6 +48,8 @@ type BattleReport = {
     bombCount:    number;
     scores:       Record<string, number>;
   };
+  /** 每人剩余手牌数（按 sessionId，0=已出完） */
+  remainingHands:        Record<string, number>;
 };
 
 export class CardRoom extends Room<GameState> {
@@ -89,6 +91,13 @@ export class CardRoom extends Room<GameState> {
     playerDoubles:  Map<string, 1|2>;
     partnerDoubled: boolean;
   } | null = null;
+
+  // Animation sync — TASK-050s
+  private dealingReadyCount: number = 0;
+  private dealingReadySet = new Set<string>(); // 去重：同一 sessionId 只计数一次
+  private dealingReadyTimer: { clear(): void } | null = null;
+  private dealingRevealTimer: { clear(): void } | null = null;
+  private doublingResultTimer: { clear(): void } | null = null;
 
   // Settlement tracking
   private tableType: TableType      = "casual";
@@ -151,6 +160,7 @@ export class CardRoom extends Room<GameState> {
     this.onMessage("request_hint",     (c: Client)                                => this.handleRequestHint(c));
     this.onMessage("force_start",      (c: Client)                                => this.handleForceStart(c));
     this.onMessage("request_rematch",  (c: Client)                                => this.handleRequestRematch(c));
+    this.onMessage("dealing_ready",    (c: Client)                                => this.handleDealingReady(c));
   }
 
   onJoin(client: Client, options?: { nickname?: string }, auth?: { userId?: number }): void {
@@ -188,12 +198,15 @@ export class CardRoom extends Room<GameState> {
   }
 
   onDispose(): void {
-    if (this.doublingTimer)       { this.doublingTimer.clear();       this.doublingTimer       = null; }
-    if (this.turnTimer)           { this.turnTimer.clear();           this.turnTimer           = null; }
-    if (this.landlordSelectTimer) { this.landlordSelectTimer.clear(); this.landlordSelectTimer = null; }
-    if (this.aiFillTimer)         { this.aiFillTimer.clear();         this.aiFillTimer         = null; }
-    if (this.aiFillTicker)        { this.aiFillTicker.clear();        this.aiFillTicker        = null; }
-    if (this.rematchWindow)       { this.rematchWindow.clear();       this.rematchWindow       = null; }
+    if (this.doublingTimer)        { this.doublingTimer.clear();        this.doublingTimer        = null; }
+    if (this.turnTimer)            { this.turnTimer.clear();            this.turnTimer            = null; }
+    if (this.landlordSelectTimer)  { this.landlordSelectTimer.clear();  this.landlordSelectTimer  = null; }
+    if (this.aiFillTimer)          { this.aiFillTimer.clear();          this.aiFillTimer          = null; }
+    if (this.aiFillTicker)         { this.aiFillTicker.clear();         this.aiFillTicker         = null; }
+    if (this.rematchWindow)        { this.rematchWindow.clear();        this.rematchWindow        = null; }
+    if (this.dealingReadyTimer)    { this.dealingReadyTimer.clear();    this.dealingReadyTimer    = null; }
+    if (this.dealingRevealTimer)   { this.dealingRevealTimer.clear();   this.dealingRevealTimer   = null; }
+    if (this.doublingResultTimer)  { this.doublingResultTimer.clear();  this.doublingResultTimer  = null; }
   }
 
   async onLeave(client: Client, _consented: boolean): Promise<void> {
@@ -263,6 +276,52 @@ export class CardRoom extends Room<GameState> {
     const landlordClient = this.clients.find(c => c.sessionId === this.landlordId);
     landlordClient?.send("bottom_cards", { cards: bottom });
 
+    // TASK-050s AC-S1/S2: 等待 dealing_ready ACK，超时 10s 静默推进
+    // SKIP_DEALING_READY=1 可跳过等待（单元测试 mock 环境使用）
+    const skipDealingReady = process.env.SKIP_DEALING_READY === "1";
+
+    if (skipDealingReady) {
+      // 单元测试模式：立即推进，不等待 ACK
+      this.advanceToLandlordSelect();
+    } else {
+      this.dealingReadyCount = 0;
+      this.dealingReadySet.clear();
+      this.dealingReadyTimer = this.clock.setTimeout(() => {
+        this.advanceToLandlordSelect();
+      }, 10000);
+
+      // AI 玩家自动发送 dealing_ready（无动画延迟）
+      for (const aiSid of this.aiSessionIds) {
+        const fakeClient = this.clients.find(c => c.sessionId === aiSid) as Client;
+        if (fakeClient) this.handleDealingReady(fakeClient);
+      }
+    }
+  }
+
+  // ── message handlers ───────────────────────────────────────────────────────
+
+  private handleReady(_client: Client): void {
+    // reserved for lobby flow
+  }
+
+  /**
+   * TASK-050s AC-S1/S2/S3: 处理 dealing_ready ACK
+   * 收到 5 个 ACK 后推进到 landlord_select；超时 10s 静默推进；去重同一 sessionId
+   */
+  private handleDealingReady(client: Client): void {
+    if (this.state.phase !== "dealing") return;
+    if (this.dealingReadySet.has(client.sessionId)) return; // AC-S3: 去重
+
+    this.dealingReadySet.add(client.sessionId);
+    this.dealingReadyCount++;
+
+    if (this.dealingReadyCount >= 5) {
+      this.cancelDealingReadyTimer();
+      this.advanceToLandlordSelect();
+    }
+  }
+
+  private advanceToLandlordSelect(): void {
     this.state.phase = "landlord_select";
 
     // 地主断线时无 turnTimer 兜底，游戏会永久挂起（ISSUE-006）；
@@ -283,15 +342,16 @@ export class CardRoom extends Room<GameState> {
     }
   }
 
-  // ── message handlers ───────────────────────────────────────────────────────
-
-  private handleReady(_client: Client): void {
-    // reserved for lobby flow
+  private cancelDealingReadyTimer(): void {
+    if (this.dealingReadyTimer) {
+      this.dealingReadyTimer.clear();
+      this.dealingReadyTimer = null;
+    }
   }
 
   /**
    * 处理地主选择暗号牌。非地主发送静默忽略（防止客户端漏洞跳过地主选牌）。
-   * 提交后立即取消超时定时器，进入加倍阶段。
+   * TASK-050s AC-S4: 提交后广播 code_card_reveal，等待 4s 后进入加倍阶段。
    */
   private handleSelectCode(client: Client, msg: { suit: number; value: number }): void {
     // 非地主静默忽略，避免任意玩家抢占地主操作
@@ -317,7 +377,21 @@ export class CardRoom extends Room<GameState> {
       else                              player.role = "civilian";
     }
 
-    this.startDoubling();
+    // TASK-050s AC-S4: 广播 code_card_reveal，等待 4s 后推进 doubling
+    this.broadcast("code_card_reveal", {
+      suit:              msg.suit,
+      value:             msg.value,
+      landlordSeatIndex: this.state.landlordSeat,
+    });
+
+    const skipAnimSync = process.env.SKIP_DEALING_READY === "1";
+    if (skipAnimSync) {
+      this.startDoubling();
+    } else {
+      this.dealingRevealTimer = this.clock.setTimeout(() => {
+        this.startDoubling();
+      }, 4000);
+    }
   }
 
   private handlePlay(client: Client, msg: { cards: number[] }): void {
@@ -580,9 +654,20 @@ export class CardRoom extends Room<GameState> {
     };
 
     this.state.doublingPhase = false;
-    this.state.phase         = "playing";
-    this.state.currentTurnSeat = this.state.landlordSeat;
-    this.startTurnTimer();
+
+    // TASK-050s AC-S6/S7: 广播 doubling_result 后等待 2s 再推进 playing
+    const skipAnimSync = process.env.SKIP_DEALING_READY === "1";
+    if (skipAnimSync) {
+      this.state.phase         = "playing";
+      this.state.currentTurnSeat = this.state.landlordSeat;
+      this.startTurnTimer();
+    } else {
+      this.doublingResultTimer = this.clock.setTimeout(() => {
+        this.state.phase         = "playing";
+        this.state.currentTurnSeat = this.state.landlordSeat;
+        this.startTurnTimer();
+      }, 2000);
+    }
   }
 
   // ── turn machine ───────────────────────────────────────────────────────────
@@ -815,6 +900,9 @@ export class CardRoom extends Room<GameState> {
         bombCount:    this.bombCount,
         scores,
       },
+      remainingHands:        Object.fromEntries(
+        [...this.hands.entries()].map(([sid, cards]) => [sid, cards.length]),
+      ),
     };
 
     Logger.info("[BATTLE]", report as unknown as import("../utils/Logger").LogContext);

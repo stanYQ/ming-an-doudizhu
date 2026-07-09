@@ -1,8 +1,8 @@
-# 明暗斗地主 — 协议参考手册 v2.0
+# 明暗斗地主 — 协议参考手册 v2.1
 
-> 权威来源：`server/src/` 实现，356/356 集成测试通过。  
+> 权威来源：`server/src/` 实现，412/412 测试通过。  
 > 适用范围：client-dev（对接指南）+ server-dev（协议规范）。  
-> 最后更新：TASK-032s（BUG 修复 + 环境）+ TASK-031s（再来一局）+ TASK-030s（好友房）+ TASK-029s（AI 补位）+ TASK-023（加倍阶段）+ TASK-022（SettleService V2）
+> 最后更新：TASK-050s（动画同步修复）+ TASK-032s（BUG 修复 + 环境）+ TASK-031s（再来一局）+ TASK-030s（好友房）+ TASK-029s（AI 补位）+ TASK-023（加倍阶段）+ TASK-022（SettleService V2）
 
 ---
 
@@ -230,6 +230,26 @@ room.send("ready");
 
 ---
 
+### `dealing_ready`
+
+**TASK-050s 新增**：客户端发牌动画播放完成后发送，通知服务端可以推进到 `landlord_select` 阶段。
+
+```typescript
+room.send("dealing_ready");
+```
+
+**约束**：
+- 仅在 `dealing` 阶段有效，其他阶段静默忽略
+- 服务端等待 5 个玩家全部发送 ACK，或超时 10s 后静默推进
+- 同一玩家重复发送不累计计数（幂等）
+- AI 玩家自动发送，无需客户端处理
+
+**使用场景**：
+- 客户端发牌动画结束回调中调用
+- 若无动画（首次进入/快速模式），收到 `your_hand` 后立即调用
+
+---
+
 ### `select_code_card`
 
 仅地主在 `landlord_select` 阶段可发送。其他玩家发送后静默忽略。
@@ -442,6 +462,29 @@ room.onMessage("room_update", (data: {
   renderRoomSlots(data.players, data.ownerSeatIndex);
 });
 ```
+
+---
+
+---
+
+#### `code_card_reveal`
+
+**TASK-050s 新增**：地主选择暗号牌后广播，客户端播放揭晓动画（4s 窗口）。
+
+```typescript
+room.onMessage("code_card_reveal", (data: {
+  suit:              number,  // 0=♠ 1=♥ 2=♦ 3=♣
+  value:             number,  // rank 0-7（对应 3-10）
+  landlordSeatIndex: number,  // 地主席位
+}) => {
+  playCodeCardRevealAnimation(data);  // 动画时长必须 ≤ 4s
+});
+```
+
+**时序约束**：
+- 服务端广播后等待 4s 再推进 `doubling` 阶段
+- 客户端动画时长**必须 ≤ 4s**，避免超出服务端窗口
+- 动画期间不阻塞 UI 响应
 
 ---
 

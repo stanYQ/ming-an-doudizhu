@@ -10,6 +10,10 @@
 
 ## 已完成
 
+- [x] TASK-050s [server] 动画同步修复：dealing_ready ACK 等待 + code_card_reveal 广播 + doubling_result 定时器 | 完成: server-dev | 测试: ✓ 412/412 | 日期: 2026-07-09
+      产物: CardRoom.ts（dealing_ready handler + 3个定时器）+ CardRoom.050.test.ts（5个测试）+ PROTOCOL.md v2.1（dealing_ready + code_card_reveal 文档）
+      技术债: SKIP_DEALING_READY=1 环境变量用于单元测试兼容，生产环境不设置
+
 - [x] TASK-052 [server] 补全核心文件文件头注释：7 个文件添加标准文件头 | 完成: server-dev | 测试: ✓ 407/407 | 日期: 2026-07-09
       产物: AuthService.ts（已有）+ MatchService.ts + CardPatternEngine.ts + CodeCard.ts + Deck.ts + RuleEngine.ts + connection.ts
 
