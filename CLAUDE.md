@@ -106,10 +106,19 @@
 ## 常用命令
 
 ```
-/pm-story   → 从 AC 生成用户故事
-/pm-prd     → 生成完整 PRD
-/pm-problem → 框定问题陈述
-/pm-epic    → 拆解 Epic
-/spec       → Spec 驱动开发访谈
-/tdd-gen    → 从 spec AC 预生成测试用例（给 Dev 参考）
+/spec          → 新 feature → Epic 假设 + AC（日常最高频）
+/pm-story      → Epic → 单个用户故事（Mike Cohn + Gherkin）
+/pm-prioritize → backlog 排序（RICE/ICE/MoSCoW）
+/pm-roadmap    → 季度路线图编排
+/pm-strategy   → 版本策略 / 上线后规划
+/pm-epic       → 大 feature 拆可并行 task
+/pm-prd        → 重大功能完整 PRD
+/pm-problem    → 模糊痛点 → 结构化问题
+/pm-discover   → 完整发现流程
+/pm-persona    → 玩家画像
+/pm-journey    → 玩家旅程图
+/pm-canvas     → Lean UX 一页纸
+/pm-reco       → 多方案对比决策
 ```
+
+排除：`saas-*` / `finance-*` / `positioning-*` / `tam-sam-som` / `pestel` / `press-release` / `*-readiness` / `pol-probe*`

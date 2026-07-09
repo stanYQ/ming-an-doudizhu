@@ -103,13 +103,37 @@
 
 ---
 
-## 常用命令
+## 常用命令（按使用频率排序）
 
-```
-/pm-story   → 从 AC 生成用户故事
-/pm-prd     → 生成完整 PRD
-/pm-problem → 框定问题陈述
-/pm-epic    → 拆解 Epic
-/spec       → Spec 驱动开发访谈
-/tdd-gen    → 从 spec AC 预生成测试用例（给 Dev 参考）
-```
+### 日常高频（每周 3-5 次）
+| 指令 | Skill | 用途 |
+|------|-------|------|
+| `/spec` | `epic-hypothesis` | 新 feature → 可测试 Epic 假设 + AC |
+| `/pm-story` | `user-story` | Epic → 单个用户故事（Mike Cohn + Gherkin AC） |
+| `/pm-prioritize` | `prioritization-advisor` | backlog 太多时选框架排序（RICE/ICE/MoSCoW） |
+
+### 规划用（每月 1-2 次）
+| 指令 | Skill | 用途 |
+|------|-------|------|
+| `/pm-roadmap` | `roadmap-planning` | 季度/里程碑路线图编排 |
+| `/pm-strategy` | `product-strategy-session` | 版本策略 / 上线后规划 |
+| `/pm-epic` | `epic-breakdown-advisor` | 大 feature 拆成可并行 task |
+| `/pm-prd` | `prd-development` | 重大功能（跨 2+ sprint）的完整 PRD |
+
+### 问题诊断用（按需）
+| 指令 | Skill | 用途 |
+|------|-------|------|
+| `/pm-problem` | `problem-statement` | 模糊痛点 → 结构化问题陈述 |
+| `/pm-discover` | `discovery-process` | 完整发现流程（问题→访谈→实验） |
+| `/pm-persona` | `proto-persona` | 定义目标玩家画像 |
+| `/pm-journey` | `customer-journey-map` | 玩家端到端体验流程 |
+| `/pm-story-map` | `user-story-mapping` | 按玩家旅程组织 backlog 全景 |
+
+### 设计对齐用（按需）
+| 指令 | Skill | 用途 |
+|------|-------|------|
+| `/pm-canvas` | `lean-ux-canvas` | UI 改动前的假设/用户/收益一页纸 |
+| `/pm-reco` | `recommendation-canvas` | 多方案拍板前的结构化对比 |
+
+### 不适用（SaaS/商业类，已排除）
+`press-release` `tam-sam-som` `pestel-analysis` `company-research` `saas-*` `finance-*` `positioning-*` `acquisition-*` `eol-message` `executive-onboarding` `*-readiness-advisor` `pol-probe*` `context-engineering` `ai-shaped-readiness`

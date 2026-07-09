@@ -10,7 +10,7 @@
 
 ## 当前进行中
 
-- [ ] TASK-043 [client] GameScene 节点树 + CardItem Prefab + PlayerSeat Prefab + HandCardView + CodeCardSelector | 认领: client-dev | 开始: 2026-07-01
+- [ ] TASK-050c [client] 动画同步修复：sendDealingReady + code_card_reveal 监听 + doubling_result 动画对齐 | 认领: client-dev | 开始: 2026-07-09
 
 
 
